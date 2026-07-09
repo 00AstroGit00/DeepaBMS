@@ -1331,6 +1331,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           parsed.leaves = parsed.leaves || freshSeed.leaves;
           parsed.announcements = parsed.announcements || freshSeed.announcements;
 
+          // Guard array fields that may be missing in older stored data (prevents FlatList crashes)
+          parsed.stays = parsed.stays || freshSeed.stays;
+          parsed.rooms = (parsed.rooms && parsed.rooms.length > 0) ? parsed.rooms : freshSeed.rooms;
+          parsed.banks = (parsed.banks && parsed.banks.length > 0) ? parsed.banks : freshSeed.banks;
+          parsed.inventory = parsed.inventory || freshSeed.inventory;
+          parsed.stockMoves = parsed.stockMoves || freshSeed.stockMoves;
+          parsed.liquor = parsed.liquor || freshSeed.liquor;
+          parsed.liquorAudits = parsed.liquorAudits || freshSeed.liquorAudits;
+          parsed.credits = parsed.credits || freshSeed.credits;
+          parsed.bankMoves = parsed.bankMoves || freshSeed.bankMoves;
+          parsed.sales = parsed.sales || freshSeed.sales;
+          parsed.txns = parsed.txns || freshSeed.txns;
+          parsed.settings = parsed.settings || freshSeed.settings;
+
           // Merge safety for new schema fields
           parsed.employees = (parsed.employees || freshSeed.employees).map((emp: any) => ({
             status: 'active',

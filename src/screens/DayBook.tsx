@@ -66,6 +66,7 @@ export default function DayBook({ navigation }: { navigation: any }) {
   const [dayOffset, setDayOffset] = useState(0);
   const [filterMode, setFilterMode] = useState<'all' | 'in' | 'out'>('all');
   const [newEntryVisible, setNewEntryVisible] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<any | null>(null);
 
   // New Transaction Form State
   const [kind, setKind] = useState<'expense' | 'income'>('expense');
@@ -324,6 +325,10 @@ export default function DayBook({ navigation }: { navigation: any }) {
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
         ListEmptyComponent={<EmptyState icon="book-outline" text="No entries for this day" />}
         renderItem={({ item }) => (
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => setSelectedEntry(item)}
+          >
           <Card
             style={{
               marginBottom: 8,
@@ -361,11 +366,11 @@ export default function DayBook({ navigation }: { navigation: any }) {
                 {item.hasBill && <Ionicons name="attach" size={12} color={theme.blue} />}
               </Row>
 
-              {/* Attachments List */}
+              {/* Attachment Thumbnails */}
               {item.attachments && item.attachments.length > 0 && (
                 <Row style={{ gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
                   {item.attachments.map((doc: AttachmentResult) => (
-                    <TouchableOpacity key={doc.id} onPress={() => handleOpenDoc(doc)}>
+                    <TouchableOpacity key={doc.id} onPress={(e) => { e.stopPropagation?.(); handleOpenDoc(doc); }}>
                       {doc.kind === 'image' ? (
                         <Image
                           source={{ uri: doc.uri }}
@@ -422,6 +427,7 @@ export default function DayBook({ navigation }: { navigation: any }) {
               </Text>
             </View>
           </Card>
+          </TouchableOpacity>
         )}
       />
 
@@ -613,6 +619,165 @@ export default function DayBook({ navigation }: { navigation: any }) {
         )}
 
         <PrimaryButton title="Save Entry" onPress={handleSaveEntry} icon="checkmark" />
+      </Sheet>
+
+      {/* Entry Detail Sheet */}
+      <Sheet
+        visible={!!selectedEntry}
+        onClose={() => setSelectedEntry(null)}
+        title="Entry Details"
+      >
+        {selectedEntry && (
+          <View>
+            {/* Type Badge */}
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 10,
+                marginBottom: 16
+              }}
+            >
+              <View
+                style={{
+                  width: 46,
+                  height: 46,
+                  borderRadius: 14,
+                  backgroundColor: selectedEntry.positive ? theme.greenSoft : theme.redSoft,
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <Ionicons
+                  name={selectedEntry.icon}
+                  size={22}
+                  color={selectedEntry.positive ? theme.green : theme.red}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontWeight: '800', fontSize: 16, color: theme.text }}>
+                  {selectedEntry.title}
+                </Text>
+                <Text style={{ color: theme.faint, fontSize: 12, marginTop: 2 }}>
+                  {selectedEntry.sub}
+                </Text>
+              </View>
+              <Text
+                style={{
+                  fontWeight: '900',
+                  fontSize: 20,
+                  color: selectedEntry.positive ? theme.green : theme.red
+                }}
+              >
+                {selectedEntry.positive ? '+' : '-'}{inr(selectedEntry.amount)}
+              </Text>
+            </View>
+
+            {/* Info Rows */}
+            <Card style={{ marginBottom: 14, padding: 14 }}>
+              {[
+                ['Date & Time', fmtDateTime(selectedEntry.date)],
+                ['Payment Mode', (selectedEntry.mode || '').toUpperCase()],
+                ['Entry Type', selectedEntry.positive ? 'Money In (Income / Sale)' : 'Money Out (Expense / Payment)'],
+              ].map(([label, value], idx) => (
+                <View
+                  key={idx}
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    paddingVertical: 8,
+                    borderBottomWidth: idx < 2 ? 1 : 0,
+                    borderBottomColor: theme.border
+                  }}
+                >
+                  <Text style={{ color: theme.sub, fontSize: 13, flex: 1 }}>{label}</Text>
+                  <Text style={{ color: theme.text, fontWeight: '600', fontSize: 13, flex: 2, textAlign: 'right' }}>{value}</Text>
+                </View>
+              ))}
+            </Card>
+
+            {/* Attachments Section */}
+            {selectedEntry.attachments && selectedEntry.attachments.length > 0 && (
+              <View style={{ marginBottom: 14 }}>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: '700',
+                    color: theme.sub,
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.5,
+                    marginBottom: 10
+                  }}
+                >
+                  Supporting Documents ({selectedEntry.attachments.length})
+                </Text>
+                <Row style={{ gap: 10, flexWrap: 'wrap' }}>
+                  {selectedEntry.attachments.map((doc: AttachmentResult) => (
+                    <TouchableOpacity
+                      key={doc.id}
+                      onPress={() => handleOpenDoc(doc)}
+                      style={{ alignItems: 'center', gap: 4 }}
+                    >
+                      {doc.kind === 'image' ? (
+                        <Image
+                          source={{ uri: doc.uri }}
+                          style={{
+                            width: 80,
+                            height: 80,
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            borderColor: theme.border
+                          }}
+                        />
+                      ) : (
+                        <View
+                          style={{
+                            width: 80,
+                            height: 80,
+                            borderRadius: 12,
+                            backgroundColor: theme.redSoft,
+                            borderWidth: 1,
+                            borderColor: theme.border,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: 6
+                          }}
+                        >
+                          <Ionicons name="document-text" size={28} color={theme.red} />
+                        </View>
+                      )}
+                      <Text style={{ fontSize: 10, color: theme.faint, maxWidth: 80 }} numberOfLines={2}>
+                        {doc.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </Row>
+              </View>
+            )}
+
+            {/* No attachment note */}
+            {(!selectedEntry.attachments || selectedEntry.attachments.length === 0) &&
+              !selectedEntry.positive && (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                  backgroundColor: theme.amberSoft,
+                  borderRadius: 10,
+                  padding: 12,
+                  marginBottom: 14
+                }}
+              >
+                <Ionicons name="alert-circle-outline" size={17} color={theme.amber} />
+                <Text style={{ color: theme.amber, fontSize: 12, fontWeight: '600', flex: 1 }}>
+                  No bill / receipt attached to this expense entry.
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
       </Sheet>
 
       {/* Modal: View Attachment */}

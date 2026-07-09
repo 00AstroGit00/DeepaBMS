@@ -269,7 +269,7 @@ export default function Hotel({ navigation }: { navigation: any }) {
         />
       ) : (
         <FlatList
-          data={state.stays}
+          data={state.stays ?? []}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
           ListEmptyComponent={<EmptyState icon="people-outline" text="No past stays yet" />}

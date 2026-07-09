@@ -2,6 +2,22 @@ import * as Print from 'expo-print';
 import { Sale, Stay, Guest } from '../context/StoreContext';
 import { inr } from './helpers';
 
+const safeDate = (dateStr: string | undefined | null): string => {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
+};
+
+const safeTime = (dateStr: string | undefined | null): string => {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? '—' : d.toLocaleTimeString();
+};
+
+const safeUpper = (val: string | undefined | null): string => {
+  return (val || '').toUpperCase();
+};
+
 export const ThermalPrinter = {
   printReceipt: async (sale: Sale, businessName: string, gstin: string) => {
     const html = `
@@ -25,14 +41,14 @@ export const ThermalPrinter = {
           
           <div class="row">
             <span>Bill No: ${sale.billNo || sale.id.substring(0, 8)}</span>
-            <span>Date: ${new Date(sale.date).toLocaleDateString()}</span>
+            <span>Date: ${safeDate(sale.date)}</span>
           </div>
           <div class="row">
-            <span>Time: ${new Date(sale.date).toLocaleTimeString()}</span>
-            <span>Mode: ${sale.mode.toUpperCase()}</span>
+            <span>Time: ${safeTime(sale.date)}</span>
+            <span>Mode: ${safeUpper(sale.mode)}</span>
           </div>
           <div class="row">
-            <span>Dept: ${sale.dept.toUpperCase()}</span>
+            <span>Dept: ${safeUpper(sale.dept)}</span>
           </div>
           
           <div class="divider"></div>
@@ -102,8 +118,8 @@ export const ThermalPrinter = {
           <div>Guest: ${stay.guestName}</div>
           <div>Phone: ${stay.phone}</div>
           <div>Room: ${stay.roomNo} (${stay.category})</div>
-          <div>Check-in: ${new Date(stay.checkIn).toLocaleDateString()}</div>
-          <div>Check-out: ${new Date(stay.checkOut).toLocaleDateString()}</div>
+          <div>Check-in: ${safeDate(stay.checkIn)}</div>
+          <div>Check-out: ${safeDate(stay.checkOut)}</div>
           <div>Duration: ${stay.nights} Nights</div>
           
           <div class="divider"></div>

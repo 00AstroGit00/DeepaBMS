@@ -9,16 +9,21 @@ const fmtNumber = (val: number): string => {
   });
 };
 
-const fmtDateRegister = (dateStr: string): string => {
+const fmtDateRegister = (dateStr: string | undefined | null): string => {
+  if (!dateStr) return '—';
   const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '—';
   const day = String(d.getDate()).padStart(2, '0');
   const month = d.toLocaleDateString('en-IN', { month: 'short' });
   const year = d.getFullYear();
   return `${day}-${month}-${year}`;
 };
 
-const fmtTimeRegister = (dateStr: string): string => {
-  return new Date(dateStr).toLocaleTimeString('en-IN', {
+const fmtTimeRegister = (dateStr: string | undefined | null): string => {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleTimeString('en-IN', {
     hour: '2-digit',
     minute: '2-digit'
   });
@@ -75,7 +80,7 @@ export const buildDayBook = (state: GlobalState, dateStr: string = todayKey()): 
       items.push({
         time: fmtTimeRegister(s.date),
         iso: s.date,
-        particulars: `${s.dept.toUpperCase()} sale - ${s.description}`,
+        particulars: `${(s.dept || '').toUpperCase()} sale - ${s.description}`,
         ref: s.billNo || '-',
         cashIn: isCash ? s.total : 0,
         bankIn: isBank ? s.total : 0,
@@ -213,14 +218,14 @@ export const buildSalesRegister = (state: GlobalState): PrintableReport => {
     String(index + 1),
     fmtDateRegister(s.date),
     s.billNo || '-',
-    s.dept.toUpperCase(),
+    (s.dept || '').toUpperCase(),
     s.description,
     fmtNumber(s.amount),
     s.gstRate ? `${s.gstRate}%` : 'NON-GST',
     fmtNumber(s.gstAmount / 2),
     fmtNumber(s.gstAmount / 2),
     fmtNumber(s.total),
-    s.mode.toUpperCase()
+    (s.mode || '').toUpperCase()
   ]);
 
   const totalTaxable = periodSales.reduce((sum, s) => sum + s.amount, 0);
@@ -292,7 +297,7 @@ export const buildExpenseRegister = (state: GlobalState): PrintableReport => {
     fmtDateRegister(t.date),
     t.category,
     t.description,
-    t.mode.toUpperCase(),
+    (t.mode || '').toUpperCase(),
     t.hasBill ? 'Yes' : 'No',
     fmtNumber(t.amount)
   ]);
@@ -484,35 +489,35 @@ export const buildGST = (state: GlobalState): PrintableReport => {
 
 // 6. Guest Register
 export const buildGuestRegister = (state: GlobalState): PrintableReport => {
-  const departures = [...state.stays].sort((a, b) => a.checkIn.localeCompare(b.checkIn));
+  const departures = [...state.stays].sort((a, b) => (a.checkIn || '').localeCompare(b.checkIn || ''));
   const arrivals = state.rooms.filter((r) => r.guest);
 
   const depRows = departures.map((stay, index) => [
     String(index + 1),
-    stay.guestName,
-    stay.phone,
-    stay.roomNo,
-    stay.category,
+    stay.guestName || '-',
+    stay.phone || '-',
+    stay.roomNo || '-',
+    stay.category || '-',
     `${fmtDateRegister(stay.checkIn)} ${fmtTimeRegister(stay.checkIn)}`,
     `${fmtDateRegister(stay.checkOut)} ${fmtTimeRegister(stay.checkOut)}`,
-    String(stay.nights),
-    fmtNumber(stay.amount),
-    stay.mode.toUpperCase()
+    String(stay.nights || 0),
+    fmtNumber(stay.amount || 0),
+    (stay.mode || '').toUpperCase()
   ]);
 
   const arrRows = arrivals.map((room, index) => [
     String(index + 1),
-    room.guest!.name,
-    room.guest!.phone,
-    room.guest!.idProof,
-    room.no,
-    `${fmtDateRegister(room.guest!.checkIn)} ${fmtTimeRegister(room.guest!.checkIn)}`,
-    String(room.guest!.adults),
-    fmtNumber(room.guest!.advance)
+    room.guest?.name || '-',
+    room.guest?.phone || '-',
+    room.guest?.idProof || '-',
+    room.no || '-',
+    `${fmtDateRegister(room.guest?.checkIn)} ${fmtTimeRegister(room.guest?.checkIn)}`,
+    String(room.guest?.adults || 0),
+    fmtNumber(room.guest?.advance || 0)
   ]);
 
-  const totalNights = departures.reduce((sum, d) => sum + d.nights, 0);
-  const totalAmount = departures.reduce((sum, d) => sum + d.amount, 0);
+  const totalNights = departures.reduce((sum, d) => sum + (d.nights || 0), 0);
+  const totalAmount = departures.reduce((sum, d) => sum + (d.amount || 0), 0);
 
   return {
     code: generateReportCode('DRTH/GR'),

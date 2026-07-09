@@ -1,11 +1,11 @@
-PASS src/utils/__tests__/payroll.test.ts
-PASS src/context/__tests__/StoreContext.test.tsx
 PASS src/utils/__tests__/helpers.test.ts
-PASS src/components/__tests__/Primitives.test.tsx
+PASS src/context/__tests__/StoreContext.test.tsx
+PASS src/utils/__tests__/payroll.test.ts
+PASS src/components/__tests__/Primitives.test.tsx (8.4 s)
 
 Test Suites: 4 passed, 4 total
 Tests:       16 passed, 16 total
 Snapshots:   0 total
-Time:        2.196 s
+Time:        11.048 s
 Ran all test suites.
 Test results written to: tests/reports/jest_report.json

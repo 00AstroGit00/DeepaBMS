@@ -5,6 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "prepackage": "node fix-paths.js",
     "package": "electron-builder --win"
   },
   "dependencies": {

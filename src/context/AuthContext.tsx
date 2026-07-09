@@ -28,8 +28,8 @@ export const ROLE_INFO: Record<string, RoleDetail> = {
   },
   cashier: {
     label: 'Cashier (Billing Counter)',
-    desc: 'Records sales and day book entries; no P&L or bank visibility',
-    perms: ['daybook', 'sales']
+    desc: 'Day book entries only; maximum 4-day view history; no sales reports or bank visibility',
+    perms: ['daybook']
   },
   reception: {
     label: 'Receptionist',

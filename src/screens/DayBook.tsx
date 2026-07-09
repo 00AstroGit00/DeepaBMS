@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import {
   useStore,
   financeForDay,
@@ -60,6 +61,7 @@ const INCOME_CATEGORIES = [
 export default function DayBook({ navigation }: { navigation: any }) {
   const { theme } = useTheme();
   const { state, dispatch } = useStore();
+  const { currentUser } = useAuth();
 
   // Day Book State
   const [search, setSearch] = useState('');
@@ -89,25 +91,34 @@ export default function DayBook({ navigation }: { navigation: any }) {
   const dayEntries = useMemo(() => {
     const list: any[] = [];
 
-    // Add Sales
-    state.sales.forEach((s) => {
-      if (keyOf(s.date) === selectedDateKey) {
-        list.push({
-          id: s.id,
-          date: s.date,
-          title: s.description,
-          sub: `${s.dept.toUpperCase()}${s.billNo ? ' · ' + s.billNo : ''}${s.gstAmount ? ' · GST ' + inr(s.gstAmount) : ''}`,
-          amount: s.total,
-          positive: true,
-          icon: 'receipt-outline',
-          mode: s.mode
-        });
-      }
-    });
+    // Add Sales (Hidden for cashiers)
+    if (currentUser?.role !== 'cashier') {
+      state.sales.forEach((s) => {
+        if (keyOf(s.date) === selectedDateKey) {
+          list.push({
+            id: s.id,
+            date: s.date,
+            title: s.description,
+            sub: `${s.dept.toUpperCase()}${s.billNo ? ' · ' + s.billNo : ''}${s.gstAmount ? ' · GST ' + inr(s.gstAmount) : ''}`,
+            amount: s.total,
+            positive: true,
+            icon: 'receipt-outline',
+            mode: s.mode
+          });
+        }
+      });
+    }
 
     // Add Transactions
     state.txns.forEach((t) => {
       if (keyOf(t.date) === selectedDateKey) {
+        // Cashiers only see transactions they created + seed transactions
+        if (currentUser?.role === 'cashier') {
+          const isOwn = t.userId === currentUser.id;
+          const isSeed = !t.userId;
+          if (!isOwn && !isSeed) return;
+        }
+
         list.push({
           id: t.id,
           date: t.date,
@@ -123,21 +134,23 @@ export default function DayBook({ navigation }: { navigation: any }) {
       }
     });
 
-    // Add Bank Moves
-    state.bankMoves.forEach((bm) => {
-      if (keyOf(bm.date) === selectedDateKey) {
-        list.push({
-          id: bm.id,
-          date: bm.date,
-          title: bm.note || bm.kind,
-          sub: `BANK ${bm.kind.toUpperCase()}`,
-          amount: bm.amount,
-          positive: bm.kind === 'withdraw',
-          icon: 'swap-horizontal-outline',
-          mode: 'bank'
-        });
-      }
-    });
+    // Add Bank Moves (Hidden for cashiers)
+    if (currentUser?.role !== 'cashier') {
+      state.bankMoves.forEach((bm) => {
+        if (keyOf(bm.date) === selectedDateKey) {
+          list.push({
+            id: bm.id,
+            date: bm.date,
+            title: bm.note || bm.kind,
+            sub: `BANK ${bm.kind.toUpperCase()}`,
+            amount: bm.amount,
+            positive: bm.kind === 'withdraw',
+            icon: 'swap-horizontal-outline',
+            mode: 'bank'
+          });
+        }
+      });
+    }
 
     return list
       .filter((e) => {
@@ -193,7 +206,9 @@ export default function DayBook({ navigation }: { navigation: any }) {
       mode,
       bankId: mode === 'bank' ? state.settings.defaultBankId : undefined,
       hasBill: attachments.length > 0,
-      attachments: attachments.length ? attachments : undefined
+      attachments: attachments.length ? attachments : undefined,
+      userId: currentUser?.id,
+      userName: currentUser?.name
     };
 
     dispatch({ type: 'ADD_TXN', txn });
@@ -213,6 +228,19 @@ export default function DayBook({ navigation }: { navigation: any }) {
           month: 'short'
         });
 
+  // Cashier Stats Computation
+  const cashierReceived = useMemo(() => {
+    return dayEntries
+      .filter((e) => e.positive)
+      .reduce((sum, e) => sum + e.amount, 0);
+  }, [dayEntries]);
+
+  const cashierPaidOut = useMemo(() => {
+    return dayEntries
+      .filter((e) => !e.positive)
+      .reduce((sum, e) => sum + e.amount, 0);
+  }, [dayEntries]);
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={{ padding: 16, paddingBottom: 8 }}>
@@ -221,6 +249,7 @@ export default function DayBook({ navigation }: { navigation: any }) {
           <Text style={{ fontSize: 22, fontWeight: '800', color: theme.text }}>Day Book</Text>
           <Row style={{ gap: 8 }}>
             <TouchableOpacity
+              disabled={currentUser?.role === 'cashier' && dayOffset >= 4}
               onPress={() => setDayOffset((prev) => prev + 1)}
               style={{
                 width: 34,
@@ -230,7 +259,8 @@ export default function DayBook({ navigation }: { navigation: any }) {
                 borderWidth: 1,
                 borderColor: theme.border,
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                opacity: (currentUser?.role === 'cashier' && dayOffset >= 4) ? 0.4 : 1
               }}
             >
               <Ionicons name="chevron-back" size={17} color={theme.sub} />
@@ -272,9 +302,25 @@ export default function DayBook({ navigation }: { navigation: any }) {
         {/* Today's Day Book Financial stats */}
         <Card style={{ padding: 14 }}>
           <Row>
-            <StatPill label="Received" value={inr(finance.revenue + finance.otherIncome)} color={theme.green} />
-            <StatPill label="Paid Out" value={inr(finance.expenses)} color={theme.red} />
-            <StatPill label="Cash in Hand" value={inr(cashAmount)} />
+            <StatPill
+              label="Received"
+              value={inr(currentUser?.role === 'cashier' ? cashierReceived : (finance.revenue + finance.otherIncome))}
+              color={theme.green}
+            />
+            <StatPill
+              label="Paid Out"
+              value={inr(currentUser?.role === 'cashier' ? cashierPaidOut : finance.expenses)}
+              color={theme.red}
+            />
+            {currentUser?.role === 'cashier' ? (
+              <StatPill
+                label="Net Entered"
+                value={inr(cashierReceived - cashierPaidOut)}
+                color={cashierReceived - cashierPaidOut >= 0 ? theme.green : theme.red}
+              />
+            ) : (
+              <StatPill label="Cash in Hand" value={inr(cashAmount)} />
+            )}
           </Row>
         </Card>
 

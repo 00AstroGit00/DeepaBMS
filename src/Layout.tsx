@@ -16,6 +16,10 @@ import { useStore, cashInHand, SyncStatus } from './context/StoreContext';
 import { useAuth, ROLE_INFO } from './context/AuthContext';
 import { useLayout } from './utils/useLayout';
 import { inr, uid } from './utils/helpers';
+import {
+  useElectronShortcut,
+  useElectronThemeSync,
+} from './utils/useElectron';
 
 // Screens
 import Dashboard from './screens/Dashboard';
@@ -106,6 +110,31 @@ export default function Layout() {
     return () => { if (loop) loop.stop(); };
   }, [syncStatus, pulseAnim]);
 
+  const allowedItems = MENU_ITEMS.filter((item) => item.perm === null || can(item.perm));
+  const initialScreen = allowedItems[0]?.key || 'Settings';
+
+  const [activeScreen, setActiveScreen] = useState(initialScreen);
+
+  // Fallback if current screen is no longer allowed
+  const currentScreen = allowedItems.some((item) => item.key === activeScreen)
+    ? activeScreen
+    : initialScreen;
+
+  // ── Electron keyboard shortcuts ──────────────────────────────
+  useElectronShortcut('onNewEntry', () => {
+    setActiveScreen('DayBook');
+  });
+  useElectronShortcut('onSearch', () => {
+    setActiveScreen('DayBook');
+  });
+  useElectronShortcut('onToggleDark', toggleTheme);
+  useElectronShortcut('onSync', () => syncNow());
+
+  // Sync app theme with system dark mode
+  useElectronThemeSync(toggleTheme);
+
+  const isDesktop = width >= 768;
+
   const syncDotColor = (s: SyncStatus): string => {
     if (s === 'synced') return theme.green;
     if (s === 'syncing') return theme.amber || '#f59e0b';
@@ -170,15 +199,37 @@ export default function Layout() {
     </TouchableOpacity>
   );
 
-  const allowedItems = MENU_ITEMS.filter((item) => item.perm === null || can(item.perm));
-  const initialScreen = allowedItems[0]?.key || 'Settings';
+  // ── Sidebar keyboard navigation (arrow keys) ────────────────
+  const allowedKeys = allowedItems.map((i) => i.key);
+  const currentIdx = allowedKeys.indexOf(currentScreen);
 
-  const [activeScreen, setActiveScreen] = useState(initialScreen);
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (!isDesktop || currentIdx === -1) return;
+      const isInput =
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement;
+      if (isInput && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) return;
 
-  // Fallback if current screen is no longer allowed
-  const currentScreen = allowedItems.some((item) => item.key === activeScreen)
-    ? activeScreen
-    : initialScreen;
+      let next = currentIdx;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        next = (currentIdx + 1) % allowedKeys.length;
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        next = (currentIdx - 1 + allowedKeys.length) % allowedKeys.length;
+      } else {
+        return;
+      }
+      setActiveScreen(allowedKeys[next]);
+    };
+
+    if (isDesktop) {
+      window.addEventListener('keydown', handleKey);
+      return () => window.removeEventListener('keydown', handleKey);
+    }
+  }, [isDesktop, currentIdx, allowedKeys]);
 
   const ActiveComponent = SCREENS_MAP[currentScreen] || Settings;
 
@@ -229,8 +280,6 @@ export default function Layout() {
       logout();
     }
   };
-
-  const isDesktop = width >= 768;
 
   if (isDesktop) {
     // Sidebar Layout for Desktop / Tablet

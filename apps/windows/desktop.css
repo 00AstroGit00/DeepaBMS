@@ -1,0 +1,175 @@
+/* ── Deepa BMS – Desktop Optimization ────────────────────────────
+ *   Injected into the Expo web build by fix-paths.js.
+ *   Theme colours are taken from ThemeContext.tsx.
+ * ──────────────────────────────────────────────────────────────── */
+
+/* Use full viewport height and prevent body scroll */
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 100vh;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Smooth scrolling for content areas ──────────────────────── */
+* {
+  scroll-behavior: smooth;
+}
+
+/* ── Custom scrollbar ─────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c4bdb2;
+  border-radius: 4px;
+  min-height: 48px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a39b8e;
+}
+
+@media (prefers-color-scheme: dark) {
+  ::-webkit-scrollbar-thumb {
+    background: #4a443c;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #6e675c;
+  }
+}
+
+/* ── Focus indicators for keyboard navigation ────────────────── */
+*:focus-visible {
+  outline: 2px solid #8b2e2e;
+  outline-offset: 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+  *:focus-visible {
+    outline-color: #e07856;
+  }
+}
+
+/* ── Prevent text selection on interactive UI elements ────────── */
+button,
+select,
+option,
+nav,
+header,
+footer,
+[role='button'],
+[role='tab'],
+[role='menuitem'] {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+}
+
+/* ── Allow text selection in content areas ────────────────────── */
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+input,
+textarea,
+[contenteditable] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* ── Selection colour matching theme ──────────────────────────── */
+::selection {
+  background: #8b2e2e;
+  color: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  ::selection {
+    background: #e07856;
+    color: #141210;
+  }
+}
+
+/* ── Cursor & hover polish ───────────────────────────────────── */
+[role='button'],
+button,
+.clickable {
+  cursor: pointer;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+[role='button']:active,
+button:active,
+.clickable:active {
+  transform: scale(0.97);
+}
+
+/* ── Larger minimum touch targets for desktop (mouse-friendly) ─ */
+button,
+a,
+[role='button'],
+[role='tab'],
+select {
+  min-height: 36px;
+}
+
+/* ── Form field sizing ────────────────────────────────────────── */
+input,
+textarea,
+select {
+  font-size: 14px;
+}
+
+/* ── Prevent double-tap zoom on desktop ───────────────────────── */
+* {
+  touch-action: manipulation;
+}
+
+/* ── Sidebar hover highlight (targets inline styles via class) ── */
+/* Expo renders TouchableOpacity as div[role="button"]           */
+/* This targets the sidebar list items:                          */
+[style*='flex-direction: row']:hover,
+[style*='flexDirection: row']:hover {
+  /* subtle background via a pseudo-element – doesn't fight inline bg */
+  position: relative;
+}
+
+/* ── Full-height content on large screens ─────────────────────── */
+@media (min-height: 800px) {
+  [style*='flex: 1'],
+  [style*='flex:1'] {
+    min-height: 0;
+  }
+}
+
+/* ── Slightly larger body text for desktop readability ────────── */
+@media (min-width: 1400px) {
+  body {
+    font-size: 15px;
+  }
+}
+
+/* ── Disable long-press context menu on UI elements (Electron) ─ */
+button,
+a,
+img {
+  -webkit-touch-callout: none;
+}

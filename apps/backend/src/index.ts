@@ -7,6 +7,7 @@ import rateLimit from 'express-rate-limit';
 import { initializeDatabase, query, run } from './db';
 import fs from 'fs';
 import path from 'path';
+import { spawn } from 'child_process';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -295,6 +296,29 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   res.status(err.status || 500).json({ message: err.message || 'Internal server error' });
 });
 
+const startQuickTunnel = (port: number) => {
+  console.log('[Tunnel] Starting automated Cloudflare Quick Tunnel...');
+  const child = spawn('npx', ['--yes', '@cloudflare/cloudflared', 'tunnel', '--no-autoupdate', '--url', `http://localhost:${port}`], {
+    shell: true
+  });
+
+  child.stderr.on('data', (data) => {
+    const output = data.toString();
+    const match = output.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
+    if (match) {
+      console.log('\n==================================================');
+      console.log('  ⚡ DEEPA BMS IS ACCESSIBLE GLOBALLY! ⚡');
+      console.log(`  Public HTTPS URL: \x1b[36m${match[0]}\x1b[0m`);
+      console.log('  Enter this URL in Settings -> serverUrl on Android/Windows');
+      console.log('==================================================\n');
+    }
+  });
+
+  child.on('error', (err) => {
+    console.error('[Tunnel] Failed to start tunnel process:', err.message);
+  });
+};
+
 // Initialize & Launch API server
 // Bind to 0.0.0.0 so LAN devices (other phones/tablets on same Wi-Fi) can reach the server
 initializeDatabase().then(() => {
@@ -302,6 +326,11 @@ initializeDatabase().then(() => {
     app.listen(Number(PORT), '0.0.0.0', () => {
       console.log(`Deepa BMS API Server listening on http://0.0.0.0:${PORT}`);
       console.log(`LAN devices: connect to http://<this-machine-IP>:${PORT}`);
+      
+      // Auto-start tunnel if flag or env variable is supplied
+      if (process.env.START_TUNNEL === 'true' || process.argv.includes('--tunnel')) {
+        startQuickTunnel(Number(PORT));
+      }
     });
   });
 }).catch((err) => {

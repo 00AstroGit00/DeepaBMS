@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef, useCallback, useState } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { keyOf, todayKey, uid } from '../utils/helpers';
 import { User } from './AuthContext';
@@ -1466,21 +1466,21 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const dispatchAndSync = useCallback((action: Action) => {
     dispatch(action);
     if (WRITE_ACTIONS.has(action.type) && stateRef.current.settings?.serverUrl?.trim()) {
-      // Debounce: wait 2s after last rapid entry before syncing
+      // Debounce: sync almost immediately (200ms) after write actions
       if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
       syncDebounceRef.current = setTimeout(() => {
         syncNow(true);
-      }, 2000);
+      }, 200);
     }
   }, [syncNow]);
 
-  // ─── Background polling every 30 seconds ────────────────────────────────
+  // ─── Background polling every 10 seconds (receives remote entries faster) ──
   useEffect(() => {
     const pollInterval = setInterval(() => {
       if (stateRef.current.settings?.serverUrl?.trim() && stateRef.current.ready) {
         syncNow(true);
       }
-    }, 30000);
+    }, 10000);
     return () => clearInterval(pollInterval);
   }, [syncNow]);
 
@@ -1492,6 +1492,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     });
     return () => subscription.remove();
+  }, [syncNow]);
+
+  // ─── Sync immediately when returning online ─────────────────────────────
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const handleOnline = () => {
+        if (stateRef.current.settings?.serverUrl?.trim() && stateRef.current.ready) {
+          syncNow(true);
+        }
+      };
+      window.addEventListener('online', handleOnline);
+      return () => window.removeEventListener('online', handleOnline);
+    }
   }, [syncNow]);
 
   // 1. Hydrate state

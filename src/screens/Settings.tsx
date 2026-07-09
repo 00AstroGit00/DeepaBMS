@@ -6,22 +6,52 @@ import {
   TextInput,
   View,
   TouchableOpacity,
-  Alert
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useStore } from '../context/StoreContext';
 import { useAuth, ROLE_INFO } from '../context/AuthContext';
-import { Card, SectionTitle, Sheet, Field, PrimaryButton } from '../components/Primitives';
+import {
+  isBiometricAvailable,
+  authenticate,
+  getBiometricType,
+  BiometricType,
+} from '../utils/biometrics';
+import {
+  Card,
+  SectionTitle,
+  Sheet,
+  Field,
+  PrimaryButton,
+} from '../components/Primitives';
 import { uid } from '../utils/helpers';
 
 export default function Settings({ navigation }: { navigation: any }) {
   const { theme, toggle } = useTheme();
   const { state, dispatch, syncStatus, syncNow } = useStore();
-  const { currentUser, logout, can } = useAuth();
+  const {
+    currentUser,
+    logout,
+    can,
+    biometricEnabled,
+    biometricAvailable,
+    enableBiometric,
+    disableBiometric,
+  } = useAuth();
+  const [bioType, setBioType] = React.useState<BiometricType>(null);
+
+  React.useEffect(() => {
+    (async () => {
+      const t = await getBiometricType();
+      setBioType(t);
+    })();
+  }, []);
 
   const [syncVisible, setSyncVisible] = React.useState(false);
-  const [syncServer, setSyncServer] = React.useState(state.settings.serverUrl || '');
+  const [syncServer, setSyncServer] = React.useState(
+    state.settings.serverUrl || '',
+  );
   const syncing = syncStatus === 'syncing';
 
   // Keep local input in sync if settings change externally
@@ -38,8 +68,8 @@ export default function Settings({ navigation }: { navigation: any }) {
           date: new Date().toISOString(),
           userId: currentUser.id,
           userName: currentUser.name,
-          action: 'LOGOUT'
-        }
+          action: 'LOGOUT',
+        },
       });
       logout();
     }
@@ -47,7 +77,10 @@ export default function Settings({ navigation }: { navigation: any }) {
 
   const handleStartSync = async () => {
     if (!syncServer.trim()) {
-      Alert.alert('Configuration Error', 'Please enter a valid Central Server URL.');
+      Alert.alert(
+        'Configuration Error',
+        'Please enter a valid Central Server URL.',
+      );
       return;
     }
 
@@ -58,9 +91,9 @@ export default function Settings({ navigation }: { navigation: any }) {
         ...state,
         settings: {
           ...state.settings,
-          serverUrl: syncServer.trim()
-        }
-      }
+          serverUrl: syncServer.trim(),
+        },
+      },
     });
 
     // Give reducer time to settle, then sync
@@ -71,19 +104,23 @@ export default function Settings({ navigation }: { navigation: any }) {
   };
 
   const handleResetDemo = () => {
-    Alert.alert('Reset Demo Data', 'Are you sure you want to reset all records to the fresh sample data?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Reset',
-        style: 'destructive',
-        onPress: () => {
-          dispatch({
-            type: 'RESET_DEMO'
-          });
-          Alert.alert('Success', 'Data reset to seeded demo records.');
-        }
-      }
-    ]);
+    Alert.alert(
+      'Reset Demo Data',
+      'Are you sure you want to reset all records to the fresh sample data?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: () => {
+            dispatch({
+              type: 'RESET_DEMO',
+            });
+            Alert.alert('Success', 'Data reset to seeded demo records.');
+          },
+        },
+      ],
+    );
   };
 
   // Helper row renderer matches original module styling
@@ -93,7 +130,7 @@ export default function Settings({ navigation }: { navigation: any }) {
     icon: any,
     iconColor: string,
     iconBg: string,
-    onPress: () => void
+    onPress: () => void,
   ) => {
     return (
       <TouchableOpacity onPress={onPress}>
@@ -103,7 +140,7 @@ export default function Settings({ navigation }: { navigation: any }) {
             padding: 14,
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 13
+            gap: 13,
           }}
         >
           <View
@@ -113,7 +150,7 @@ export default function Settings({ navigation }: { navigation: any }) {
               borderRadius: 13,
               backgroundColor: iconBg,
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
             }}
           >
             <Ionicons name={icon} size={21} color={iconColor} />
@@ -124,7 +161,7 @@ export default function Settings({ navigation }: { navigation: any }) {
               style={{
                 fontWeight: '700',
                 color: theme.text,
-                fontSize: 15
+                fontSize: 15,
               }}
             >
               {title}
@@ -133,7 +170,7 @@ export default function Settings({ navigation }: { navigation: any }) {
               style={{
                 color: theme.faint,
                 fontSize: 12,
-                marginTop: 2
+                marginTop: 2,
               }}
             >
               {desc}
@@ -149,8 +186,17 @@ export default function Settings({ navigation }: { navigation: any }) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-        <Text style={{ fontSize: 22, fontWeight: '800', color: theme.text }}>More</Text>
-        <Text style={{ color: theme.sub, fontSize: 13, marginTop: 2, marginBottom: 14 }}>
+        <Text style={{ fontSize: 22, fontWeight: '800', color: theme.text }}>
+          More
+        </Text>
+        <Text
+          style={{
+            color: theme.sub,
+            fontSize: 13,
+            marginTop: 2,
+            marginBottom: 14,
+          }}
+        >
           {state.settings.businessName}
         </Text>
 
@@ -162,7 +208,7 @@ export default function Settings({ navigation }: { navigation: any }) {
               padding: 14,
               flexDirection: 'row',
               alignItems: 'center',
-              gap: 13
+              gap: 13,
             }}
           >
             <View
@@ -172,14 +218,14 @@ export default function Settings({ navigation }: { navigation: any }) {
                 borderRadius: 23,
                 backgroundColor: theme.primarySoft,
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
               }}
             >
               <Text
                 style={{
                   fontWeight: '800',
                   color: theme.primary,
-                  fontSize: 17
+                  fontSize: 17,
                 }}
               >
                 {currentUser.name.charAt(0)}
@@ -191,7 +237,7 @@ export default function Settings({ navigation }: { navigation: any }) {
                 style={{
                   fontWeight: '800',
                   color: theme.text,
-                  fontSize: 15
+                  fontSize: 15,
                 }}
               >
                 {currentUser.name}
@@ -200,7 +246,7 @@ export default function Settings({ navigation }: { navigation: any }) {
                 style={{
                   color: theme.sub,
                   fontSize: 12,
-                  marginTop: 2
+                  marginTop: 2,
                 }}
               >
                 {ROLE_INFO[currentUser.role]?.label} · signed in
@@ -216,7 +262,7 @@ export default function Settings({ navigation }: { navigation: any }) {
                 backgroundColor: theme.redSoft,
                 paddingHorizontal: 13,
                 paddingVertical: 9,
-                borderRadius: 11
+                borderRadius: 11,
               }}
             >
               <Ionicons name="log-out-outline" size={16} color={theme.red} />
@@ -224,7 +270,7 @@ export default function Settings({ navigation }: { navigation: any }) {
                 style={{
                   color: theme.red,
                   fontWeight: '700',
-                  fontSize: 13
+                  fontSize: 13,
                 }}
               >
                 Sign Out
@@ -233,8 +279,86 @@ export default function Settings({ navigation }: { navigation: any }) {
           </Card>
         )}
 
+        {currentUser && biometricAvailable && (
+          <Card
+            style={{
+              marginBottom: 4,
+              padding: 14,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 13,
+            }}
+          >
+            <View
+              style={{
+                width: 46,
+                height: 46,
+                borderRadius: 14,
+                backgroundColor: theme.primarySoft,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Ionicons
+                name={
+                  bioType === 'face' ? 'scan-outline' : 'finger-print-outline'
+                }
+                size={22}
+                color={theme.primary}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{ fontWeight: '800', color: theme.text, fontSize: 15 }}
+              >
+                {bioType === 'face' ? 'Face ID' : 'Fingerprint'} Login
+              </Text>
+              <Text style={{ color: theme.sub, fontSize: 12, marginTop: 2 }}>
+                {biometricEnabled
+                  ? 'Quick sign in with biometric'
+                  : 'Sign in faster without PIN'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={async () => {
+                if (biometricEnabled) {
+                  await disableBiometric();
+                } else {
+                  const ok = await authenticate(
+                    `Enable ${bioType === 'face' ? 'Face ID' : 'fingerprint'} for ${currentUser.name}`,
+                  );
+                  if (ok) {
+                    await enableBiometric();
+                  }
+                }
+              }}
+              style={{
+                paddingHorizontal: 14,
+                paddingVertical: 8,
+                borderRadius: 10,
+                backgroundColor: biometricEnabled
+                  ? theme.greenSoft
+                  : theme.cardAlt,
+              }}
+            >
+              <Text
+                style={{
+                  fontWeight: '700',
+                  fontSize: 13,
+                  color: biometricEnabled ? theme.green : theme.sub,
+                }}
+              >
+                {biometricEnabled ? 'ON' : 'OFF'}
+              </Text>
+            </TouchableOpacity>
+          </Card>
+        )}
+
         {/* Operations launchers (only visible if user has operations access) */}
-        {(can('inventory') || can('credits') || can('banking') || can('employees')) && (
+        {(can('inventory') ||
+          can('credits') ||
+          can('banking') ||
+          can('employees')) && (
           <View>
             <SectionTitle>Operations</SectionTitle>
             {can('inventory') &&
@@ -244,7 +368,7 @@ export default function Settings({ navigation }: { navigation: any }) {
                 'cube-outline',
                 theme.teal,
                 theme.tealSoft,
-                () => navigation.navigate('Inventory')
+                () => navigation.navigate('Inventory'),
               )}
             {can('credits') &&
               renderSettingRow(
@@ -253,7 +377,7 @@ export default function Settings({ navigation }: { navigation: any }) {
                 'people-outline',
                 theme.amber,
                 theme.amberSoft,
-                () => navigation.navigate('Credits')
+                () => navigation.navigate('Credits'),
               )}
             {can('banking') &&
               renderSettingRow(
@@ -262,7 +386,7 @@ export default function Settings({ navigation }: { navigation: any }) {
                 'business-outline',
                 theme.blue,
                 theme.blueSoft,
-                () => navigation.navigate('Banking')
+                () => navigation.navigate('Banking'),
               )}
             {can('employees') &&
               renderSettingRow(
@@ -271,7 +395,7 @@ export default function Settings({ navigation }: { navigation: any }) {
                 'id-card-outline',
                 theme.primary,
                 theme.primarySoft,
-                () => navigation.navigate('Employees')
+                () => navigation.navigate('Employees'),
               )}
           </View>
         )}
@@ -286,7 +410,7 @@ export default function Settings({ navigation }: { navigation: any }) {
               'stats-chart-outline',
               theme.primary,
               theme.primarySoft,
-              () => navigation.navigate('Reports')
+              () => navigation.navigate('Reports'),
             )}
             {renderSettingRow(
               'Analytics Board',
@@ -294,7 +418,7 @@ export default function Settings({ navigation }: { navigation: any }) {
               'pie-chart-outline',
               theme.blue,
               theme.blueSoft,
-              () => navigation.navigate('Analytics')
+              () => navigation.navigate('Analytics'),
             )}
           </View>
         )}
@@ -308,7 +432,7 @@ export default function Settings({ navigation }: { navigation: any }) {
             'shield-checkmark-outline',
             theme.green,
             theme.greenSoft,
-            () => navigation.navigate('Users')
+            () => navigation.navigate('Users'),
           )}
 
         {renderSettingRow(
@@ -323,12 +447,20 @@ export default function Settings({ navigation }: { navigation: any }) {
                   ? `Auto-syncing every 30s \u00b7 ${state.settings.lastSyncedAt ? 'Last: ' + state.settings.lastSyncedAt : 'Pending\u2026'}`
                   : 'Configure central server for automatic multi-device sync',
           'sync-outline',
-          syncStatus === 'offline' ? theme.red : syncStatus === 'synced' ? theme.green : theme.blue,
-          syncStatus === 'offline' ? theme.redSoft : syncStatus === 'synced' ? theme.greenSoft : theme.blueSoft,
+          syncStatus === 'offline'
+            ? theme.red
+            : syncStatus === 'synced'
+              ? theme.green
+              : theme.blue,
+          syncStatus === 'offline'
+            ? theme.redSoft
+            : syncStatus === 'synced'
+              ? theme.greenSoft
+              : theme.blueSoft,
           () => {
             setSyncServer(state.settings.serverUrl || '');
             setSyncVisible(true);
-          }
+          },
         )}
 
         {renderSettingRow(
@@ -340,9 +472,9 @@ export default function Settings({ navigation }: { navigation: any }) {
           () => {
             Alert.alert(
               'Backup Complete',
-              'All data is stored offline-first on this device and auto-saved on every entry. An encrypted snapshot has been created. When internet is available, it syncs to Firebase automatically.'
+              'All data is stored offline-first on this device and auto-saved on every entry. An encrypted snapshot has been created. When internet is available, it syncs to Firebase automatically.',
             );
-          }
+          },
         )}
 
         {renderSettingRow(
@@ -357,10 +489,10 @@ export default function Settings({ navigation }: { navigation: any }) {
             } else {
               Alert.alert(
                 'Audit Trail Active',
-                `${state.auditLog.length} security events and ${state.sales.length + state.txns.length + state.bankMoves.length} business entries are timestamped. The full log is visible to the Owner.`
+                `${state.auditLog.length} security events and ${state.sales.length + state.txns.length + state.bankMoves.length} business entries are timestamped. The full log is visible to the Owner.`,
               );
             }
-          }
+          },
         )}
 
         {renderSettingRow(
@@ -372,18 +504,20 @@ export default function Settings({ navigation }: { navigation: any }) {
           () => {
             Alert.alert(
               'ഭാഷ തിരഞ്ഞെടുക്കുക',
-              'Malayalam UI pack ships in the production build - all labels, categories and reports render in മലയാളം with Indian number formatting.'
+              'Malayalam UI pack ships in the production build - all labels, categories and reports render in മലയാളം with Indian number formatting.',
             );
-          }
+          },
         )}
 
         {renderSettingRow(
           'Theme',
-          theme.dark ? 'Dark mode on - tap to switch' : 'Light mode on - tap to switch',
+          theme.dark
+            ? 'Dark mode on - tap to switch'
+            : 'Light mode on - tap to switch',
           theme.dark ? 'moon-outline' : 'sunny-outline',
           theme.amber,
           theme.amberSoft,
-          toggle
+          toggle,
         )}
 
         {can('users') &&
@@ -393,7 +527,7 @@ export default function Settings({ navigation }: { navigation: any }) {
             'refresh-outline',
             theme.red,
             theme.redSoft,
-            handleResetDemo
+            handleResetDemo,
           )}
 
         {/* Footer info card */}
@@ -402,14 +536,14 @@ export default function Settings({ navigation }: { navigation: any }) {
             marginTop: 18,
             backgroundColor: theme.cardAlt,
             alignItems: 'center',
-            padding: 18
+            padding: 18,
           }}
         >
           <Text
             style={{
               fontWeight: '800',
               color: theme.text,
-              fontSize: 15
+              fontSize: 15,
             }}
           >
             Deepa BMS v1.0
@@ -420,7 +554,7 @@ export default function Settings({ navigation }: { navigation: any }) {
               fontSize: 12,
               marginTop: 4,
               textAlign: 'center',
-              lineHeight: 18
+              lineHeight: 18,
             }}
           >
             Offline-first Business Management System{'\n'}
@@ -452,7 +586,7 @@ export default function Settings({ navigation }: { navigation: any }) {
                     : theme.cardAlt,
             borderRadius: 12,
             padding: 12,
-            marginBottom: 18
+            marginBottom: 18,
           }}
         >
           <Ionicons
@@ -477,7 +611,9 @@ export default function Settings({ navigation }: { navigation: any }) {
             }
           />
           <View style={{ flex: 1 }}>
-            <Text style={{ fontWeight: '700', color: theme.text, fontSize: 13 }}>
+            <Text
+              style={{ fontWeight: '700', color: theme.text, fontSize: 13 }}
+            >
               {syncStatus === 'synced'
                 ? 'Synced successfully'
                 : syncStatus === 'offline'
@@ -497,7 +633,14 @@ export default function Settings({ navigation }: { navigation: any }) {
         </View>
 
         {/* Server URL input */}
-        <Text style={{ fontSize: 13, fontWeight: '600', color: theme.sub, marginBottom: 6 }}>
+        <Text
+          style={{
+            fontSize: 13,
+            fontWeight: '600',
+            color: theme.sub,
+            marginBottom: 6,
+          }}
+        >
           Central Server URL
         </Text>
         <View
@@ -509,10 +652,15 @@ export default function Settings({ navigation }: { navigation: any }) {
             borderColor: theme.border,
             borderRadius: 12,
             paddingHorizontal: 14,
-            marginBottom: 6
+            marginBottom: 6,
           }}
         >
-          <Ionicons name="globe-outline" size={16} color={theme.faint} style={{ marginRight: 8 }} />
+          <Ionicons
+            name="globe-outline"
+            size={16}
+            color={theme.faint}
+            style={{ marginRight: 8 }}
+          />
           <TextInput
             value={syncServer}
             onChangeText={setSyncServer}
@@ -527,7 +675,7 @@ export default function Settings({ navigation }: { navigation: any }) {
               flex: 1,
               fontSize: 15,
               color: theme.text,
-              paddingVertical: 13
+              paddingVertical: 13,
             }}
           />
           {syncServer.trim() ? (
@@ -540,7 +688,9 @@ export default function Settings({ navigation }: { navigation: any }) {
           ) : null}
         </View>
         <Text style={{ color: theme.faint, fontSize: 11, marginBottom: 20 }}>
-          Enter the local IP of the device running the backend server (e.g. http://192.168.1.10:3000). All devices on the same Wi-Fi network will auto-sync every 30s.
+          Enter the local IP of the device running the backend server (e.g.
+          http://192.168.1.10:3000). All devices on the same Wi-Fi network will
+          auto-sync every 30s.
         </Text>
 
         {/* How it works info box */}
@@ -550,16 +700,19 @@ export default function Settings({ navigation }: { navigation: any }) {
             borderRadius: 12,
             padding: 12,
             marginBottom: 20,
-            gap: 6
+            gap: 6,
           }}
         >
           {[
             '📲 New entries sync to server within 2 seconds',
             '🔄 Auto-pull from server every 30 seconds',
             '📱 Immediate sync when phone unlocks',
-            '🔀 Data from all devices is intelligently merged'
+            '🔀 Data from all devices is intelligently merged',
           ].map((line) => (
-            <Text key={line} style={{ color: theme.blue, fontSize: 12, lineHeight: 18 }}>
+            <Text
+              key={line}
+              style={{ color: theme.blue, fontSize: 12, lineHeight: 18 }}
+            >
               {line}
             </Text>
           ))}
@@ -567,7 +720,13 @@ export default function Settings({ navigation }: { navigation: any }) {
 
         {/* Action buttons */}
         <PrimaryButton
-          title={syncing ? 'Syncing…' : state.settings.serverUrl ? 'Save & Sync Now' : 'Connect & Sync'}
+          title={
+            syncing
+              ? 'Syncing…'
+              : state.settings.serverUrl
+                ? 'Save & Sync Now'
+                : 'Connect & Sync'
+          }
           onPress={handleStartSync}
           icon="sync-outline"
           color={theme.blue}
@@ -580,8 +739,12 @@ export default function Settings({ navigation }: { navigation: any }) {
                 type: 'HYDRATE',
                 state: {
                   ...state,
-                  settings: { ...state.settings, serverUrl: '', lastSyncedAt: '' }
-                }
+                  settings: {
+                    ...state.settings,
+                    serverUrl: '',
+                    lastSyncedAt: '',
+                  },
+                },
               });
               setSyncServer('');
             }}

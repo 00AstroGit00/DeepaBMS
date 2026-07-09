@@ -5,14 +5,14 @@ import {
   Text,
   View,
   TouchableOpacity,
-  Alert
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import {
   useStore,
   liquorStockValue,
-  LiquorItem
+  LiquorItem,
 } from '../context/StoreContext';
 import {
   Card,
@@ -24,9 +24,9 @@ import {
   Field,
   Select,
   PrimaryButton,
-  EmptyState
+  EmptyState,
 } from '../components/Primitives';
-import { inr, todayKey, keyOf, fmtDate, uid, parseNum, isToday } from '../utils/helpers';
+import { inr, fmtDate, uid, parseNum, isToday, pegStr } from '../utils/helpers';
 import { warnUser } from '../utils/fileExporter';
 
 const LIQUOR_TYPES = [
@@ -35,7 +35,7 @@ const LIQUOR_TYPES = [
   { value: 'Brandy', icon: 'wine-outline' as const },
   { value: 'Vodka', icon: 'wine-outline' as const },
   { value: 'Beer', icon: 'beer-outline' as const },
-  { value: 'Wine', icon: 'wine-outline' as const }
+  { value: 'Wine', icon: 'wine-outline' as const },
 ];
 
 const BOTTLE_SIZES = [
@@ -44,13 +44,13 @@ const BOTTLE_SIZES = [
   { value: '500', label: '500 ml · Beer can' },
   { value: '650', label: '650 ml · Beer bottle' },
   { value: '750', label: '750 ml · Full bottle' },
-  { value: '1000', label: '1000 ml · Litre' }
+  { value: '1000', label: '1000 ml · Litre' },
 ];
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash', icon: 'cash-outline' as const },
   { value: 'upi', label: 'UPI', icon: 'qr-code-outline' as const },
-  { value: 'card', label: 'Card', icon: 'card-outline' as const }
+  { value: 'card', label: 'Card', icon: 'card-outline' as const },
 ];
 
 export default function Bar({ navigation }: { navigation: any }) {
@@ -62,7 +62,9 @@ export default function Bar({ navigation }: { navigation: any }) {
 
   // Selected item and current modal operational panel (sell, purchase, audit, edit)
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  const [opMode, setOpMode] = useState<'sell' | 'purchase' | 'audit' | 'edit'>('sell');
+  const [opMode, setOpMode] = useState<'sell' | 'purchase' | 'audit' | 'edit'>(
+    'sell',
+  );
 
   // Add Brand Sheet visibility
   const [addBrandVisible, setAddBrandVisible] = useState(false);
@@ -78,8 +80,9 @@ export default function Bar({ navigation }: { navigation: any }) {
   const [pricePerBottle, setPricePerBottle] = useState('');
 
   // Operations state
-  const [opQty, setOpQty] = useState(''); // selling pegs or purchasing bottles
-  const [sellUnit, setSellUnit] = useState<'peg' | 'bottle'>('peg');
+  const [opQty, setOpQty] = useState(''); // purchasing bottles (purchase mode)
+  const [bottleQty, setBottleQty] = useState(''); // selling bottles
+  const [pegQty, setPegQty] = useState(''); // selling pegs (fractional allowed)
   const [paymentMode, setPaymentMode] = useState('cash');
   const [physicalCountML, setPhysicalCountML] = useState('');
 
@@ -115,7 +118,7 @@ export default function Bar({ navigation }: { navigation: any }) {
       looseML: Math.min(loose, size - 1),
       costPerBottle: parseNum(costPerBottle) || 0,
       pricePerPeg: parseNum(pricePerPeg) || 0,
-      pricePerBottle: parseNum(pricePerBottle) || 0
+      pricePerBottle: parseNum(pricePerBottle) || 0,
     };
   };
 
@@ -129,46 +132,58 @@ export default function Bar({ navigation }: { navigation: any }) {
     setPricePerPeg('');
     setPricePerBottle('');
     setOpQty('');
-    setSellUnit('peg');
+    setBottleQty('');
+    setPegQty('');
     setPhysicalCountML('');
   };
 
   const handleRecordSale = () => {
     if (!selectedItem) return;
 
-    const qty = Math.max(1, Math.round(parseNum(opQty) || 1));
     const isBeer = selectedItem.type === 'Beer';
-    const volumeToDeduct = qty * (isBeer || sellUnit === 'bottle' ? selectedItem.sizeML : 60);
+    const bQty = Math.floor(parseNum(bottleQty) || 0);
+    const pQty = parseNum(pegQty) || 0;
+
+    if (bQty < 0) return;
+    if (pQty < 0) return;
+    if (bQty === 0 && pQty === 0) return;
+
+    const bottleML = bQty * selectedItem.sizeML;
+    const pegML = isBeer ? 0 : Math.round(pQty * 60);
+    const volumeToDeduct = bottleML + pegML;
     const currentML = getMLStock(selectedItem);
 
     if (volumeToDeduct > currentML) {
       warnUser(
         'Insufficient Stock',
-        `Only ${selectedItem.fullBottles} bottle(s) + ${selectedItem.looseML}ml of ${selectedItem.brand} in stock (${currentML}ml). Cannot sell ${volumeToDeduct}ml.`
+        `Only ${selectedItem.fullBottles} bottle(s) + ${selectedItem.looseML}ml of ${selectedItem.brand} in stock (${currentML}ml). Cannot sell ${volumeToDeduct}ml.`,
       );
       return;
     }
 
-    const price = isBeer || sellUnit === 'bottle' ? selectedItem.pricePerBottle * qty : selectedItem.pricePerPeg * qty;
-    const descSuffix = isBeer || sellUnit === 'bottle' ? `${qty} btl` : `${qty} peg`;
+    const price =
+      bQty * selectedItem.pricePerBottle + pQty * selectedItem.pricePerPeg;
+    const parts: string[] = [];
+    if (bQty > 0) parts.push(`${bQty} btl`);
+    if (pQty > 0) parts.push(`${pQty} peg`);
 
     const sale = {
       id: uid(),
       date: new Date().toISOString(),
       dept: 'bar' as const,
-      description: `${selectedItem.brand} · ${descSuffix}`,
+      description: `${selectedItem.brand} · ${parts.join(' + ')}`,
       amount: price,
       gstRate: 0,
       gstAmount: 0,
       total: price,
-      mode: paymentMode as any
+      mode: paymentMode as any,
     };
 
     dispatch({
       type: 'SELL_LIQUOR',
       itemId: selectedItem.id,
       ml: volumeToDeduct,
-      sale
+      sale,
     });
 
     setSelectedItemId(null);
@@ -190,14 +205,14 @@ export default function Bar({ navigation }: { navigation: any }) {
       amount: expenseCost,
       mode: 'bank' as const,
       bankId: state.settings.defaultBankId,
-      hasBill: true
+      hasBill: true,
     };
 
     dispatch({
       type: 'LIQUOR_PURCHASE',
       itemId: selectedItem.id,
       bottles: qty,
-      txn
+      txn,
     });
 
     setSelectedItemId(null);
@@ -208,7 +223,10 @@ export default function Bar({ navigation }: { navigation: any }) {
     if (!selectedItem) return;
 
     if (!physicalCountML.trim()) {
-      warnUser('Physical Count Required', 'Enter the physically counted stock in ml before saving the audit.');
+      warnUser(
+        'Physical Count Required',
+        'Enter the physically counted stock in ml before saving the audit.',
+      );
       return;
     }
 
@@ -227,8 +245,8 @@ export default function Bar({ navigation }: { navigation: any }) {
         actualBottles: Math.floor(countedML / selectedItem.sizeML),
         actualLooseML: countedML % selectedItem.sizeML,
         differenceML: countedML - expectedML,
-        auditor: 'Owner'
-      }
+        auditor: 'Owner',
+      },
     });
 
     setSelectedItemId(null);
@@ -244,8 +262,8 @@ export default function Bar({ navigation }: { navigation: any }) {
         type: 'UPDATE_LIQUOR_ITEM',
         item: {
           ...vals,
-          id: selectedItem.id
-        }
+          id: selectedItem.id,
+        },
       });
       setSelectedItemId(null);
       clearForm();
@@ -264,12 +282,12 @@ export default function Bar({ navigation }: { navigation: any }) {
         onPress: () => {
           dispatch({
             type: 'REMOVE_LIQUOR_ITEM',
-            itemId: selectedItem.id
+            itemId: selectedItem.id,
           });
           setSelectedItemId(null);
           clearForm();
-        }
-      }
+        },
+      },
     ]);
   };
 
@@ -280,8 +298,8 @@ export default function Bar({ navigation }: { navigation: any }) {
         type: 'ADD_LIQUOR_ITEM',
         item: {
           ...vals,
-          id: uid()
-        }
+          id: uid(),
+        },
       });
       setAddBrandVisible(false);
       clearForm();
@@ -294,13 +312,18 @@ export default function Bar({ navigation }: { navigation: any }) {
     Brandy: theme.purple,
     Vodka: theme.blue,
     Beer: theme.teal,
-    Wine: theme.red
+    Wine: theme.red,
   };
 
   const renderSharedFormFields = () => {
     return (
       <View>
-        <Field label="Brand Name" value={brandName} onChangeText={setBrandName} placeholder="e.g. Royal Stag" />
+        <Field
+          label="Brand Name"
+          value={brandName}
+          onChangeText={setBrandName}
+          placeholder="e.g. Royal Stag"
+        />
         <Row style={{ gap: 12, alignItems: 'flex-start' }}>
           <View style={{ flex: 1 }}>
             <Select
@@ -317,27 +340,57 @@ export default function Bar({ navigation }: { navigation: any }) {
             />
           </View>
           <View style={{ flex: 1 }}>
-            <Select label="Bottle Size" value={bottleSize} onChange={setBottleSize} options={BOTTLE_SIZES} color={theme.amber} />
+            <Select
+              label="Bottle Size"
+              value={bottleSize}
+              onChange={setBottleSize}
+              options={BOTTLE_SIZES}
+              color={theme.amber}
+            />
           </View>
         </Row>
         <Row style={{ gap: 12 }}>
           <View style={{ flex: 1 }}>
-            <Field label="Full Bottles" value={fullBottles} onChangeText={setFullBottles} keyboardType="numeric" placeholder="0" />
+            <Field
+              label="Full Bottles"
+              value={fullBottles}
+              onChangeText={setFullBottles}
+              keyboardType="numeric"
+              placeholder="0"
+            />
           </View>
           <View style={{ flex: 1 }}>
             <Field
-              label={liquorType === 'Beer' ? 'Loose ml (n/a for beer)' : 'Loose / Open Bottle (ml)'}
+              label={liquorType === 'Beer' ? 'Loose ml (n/a)' : 'Loose (ml)'}
               value={looseML}
               onChangeText={setLooseML}
               keyboardType="numeric"
               placeholder="0"
               disabled={liquorType === 'Beer'}
             />
+            {liquorType !== 'Beer' && looseML.trim() && (
+              <Text
+                style={{
+                  fontSize: 11,
+                  color: theme.faint,
+                  marginTop: -8,
+                  marginBottom: 6,
+                }}
+              >
+                ≈ {pegStr(parseNum(looseML))}
+              </Text>
+            )}
           </View>
         </Row>
         <Row style={{ gap: 12 }}>
           <View style={{ flex: 1 }}>
-            <Field label="Cost / Bottle (₹)" value={costPerBottle} onChangeText={setCostPerBottle} keyboardType="numeric" placeholder="0" />
+            <Field
+              label="Cost / Bottle (₹)"
+              value={costPerBottle}
+              onChangeText={setCostPerBottle}
+              keyboardType="numeric"
+              placeholder="0"
+            />
           </View>
           <View style={{ flex: 1 }}>
             <Field
@@ -352,7 +405,13 @@ export default function Bar({ navigation }: { navigation: any }) {
         </Row>
         <Row style={{ gap: 12 }}>
           <View style={{ flex: 1 }}>
-            <Field label="Selling Price / Bottle (₹)" value={pricePerBottle} onChangeText={setPricePerBottle} keyboardType="numeric" placeholder="0" />
+            <Field
+              label="Selling Price / Bottle (₹)"
+              value={pricePerBottle}
+              onChangeText={setPricePerBottle}
+              keyboardType="numeric"
+              placeholder="0"
+            />
           </View>
           <View style={{ flex: 1 }} />
         </Row>
@@ -364,13 +423,24 @@ export default function Bar({ navigation }: { navigation: any }) {
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       {/* Top Header stats */}
       <View style={{ padding: 16, paddingBottom: 8 }}>
-        <Text style={{ fontSize: 22, fontWeight: '800', color: theme.text, marginBottom: 12 }}>
+        <Text
+          style={{
+            fontSize: 22,
+            fontWeight: '800',
+            color: theme.text,
+            marginBottom: 12,
+          }}
+        >
           Bar Management
         </Text>
 
         <Card style={{ padding: 14, marginBottom: 12 }}>
           <Row>
-            <StatPill label="Today's Bar Sales" value={inr(todayBarSales)} color={theme.amber} />
+            <StatPill
+              label="Today's Bar Sales"
+              value={inr(todayBarSales)}
+              color={theme.amber}
+            />
             <StatPill label="Stock Value" value={inr(totalStockValue)} />
             <StatPill label="Brands" value={String(state.liquor.length)} />
           </Row>
@@ -379,7 +449,7 @@ export default function Bar({ navigation }: { navigation: any }) {
         <Segmented
           options={[
             { key: 'stock', label: 'Liquor Stock' },
-            { key: 'variance', label: 'Variance Log' }
+            { key: 'variance', label: 'Variance Log' },
           ]}
           value={activeTab}
           onChange={(val) => setActiveTab(val as any)}
@@ -392,7 +462,9 @@ export default function Bar({ navigation }: { navigation: any }) {
           data={state.liquor}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
-          ListEmptyComponent={<EmptyState icon="wine-outline" text="No brands registered yet" />}
+          ListEmptyComponent={
+            <EmptyState icon="wine-outline" text="No brands registered yet" />
+          }
           removeClippedSubviews
           initialNumToRender={10}
           maxToRenderPerBatch={10}
@@ -404,7 +476,6 @@ export default function Bar({ navigation }: { navigation: any }) {
                 onPress={() => {
                   setSelectedItemId(item.id);
                   setOpMode('sell');
-                  setSellUnit(item.type === 'Beer' ? 'bottle' : 'peg');
                   setBrandName(item.brand);
                   setLiquorType(item.type);
                   setBottleSize(String(item.sizeML));
@@ -425,32 +496,66 @@ export default function Bar({ navigation }: { navigation: any }) {
                           borderRadius: 12,
                           backgroundColor: theme.cardAlt,
                           alignItems: 'center',
-                          justifyContent: 'center'
+                          justifyContent: 'center',
                         }}
                       >
                         <Ionicons
-                          name={item.type === 'Beer' ? 'beer-outline' : 'wine-outline'}
+                          name={
+                            item.type === 'Beer'
+                              ? 'beer-outline'
+                              : 'wine-outline'
+                          }
                           size={19}
                           color={typeColors[item.type] || theme.amber}
                         />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontWeight: '700', color: theme.text, fontSize: 14 }} numberOfLines={1}>
+                        <Text
+                          style={{
+                            fontWeight: '700',
+                            color: theme.text,
+                            fontSize: 14,
+                          }}
+                          numberOfLines={1}
+                        >
                           {item.brand}
                         </Text>
-                        <Text style={{ color: theme.faint, fontSize: 11, marginTop: 2 }}>
-                          {item.type} · {item.sizeML}ml · cost {inr(item.costPerBottle)}/btl
+                        <Text
+                          style={{
+                            color: theme.faint,
+                            fontSize: 11,
+                            marginTop: 2,
+                          }}
+                        >
+                          {item.type} · {item.sizeML}ml · cost{' '}
+                          {inr(item.costPerBottle)}/btl
                         </Text>
                       </View>
                     </Row>
                     {isLowStock && <Badge text="LOW" color={theme.red} soft />}
                   </Row>
                   <Row style={{ marginTop: 10, gap: 0 }}>
-                    <StatPill label="Full bottles" value={String(item.fullBottles)} />
-                    <StatPill label="Loose" value={item.type === 'Beer' ? '—' : `${item.looseML} ml`} />
                     <StatPill
-                      label={item.type === 'Beer' ? 'Price/btl' : 'Peg / Bottle'}
-                      value={item.type === 'Beer' ? inr(item.pricePerBottle) : `${inr(item.pricePerPeg)} / ${inr(item.pricePerBottle)}`}
+                      label="Full bottles"
+                      value={String(item.fullBottles)}
+                    />
+                    <StatPill
+                      label="Loose"
+                      value={
+                        item.type === 'Beer'
+                          ? '—'
+                          : `${item.looseML} ml (${pegStr(item.looseML)})`
+                      }
+                    />
+                    <StatPill
+                      label={
+                        item.type === 'Beer' ? 'Price/btl' : 'Peg / Bottle'
+                      }
+                      value={
+                        item.type === 'Beer'
+                          ? inr(item.pricePerBottle)
+                          : `${inr(item.pricePerPeg)} / ${inr(item.pricePerBottle)}`
+                      }
                     />
                   </Row>
                 </Card>
@@ -476,7 +581,11 @@ export default function Bar({ navigation }: { navigation: any }) {
           renderItem={({ item }) => (
             <Card style={{ marginBottom: 8, padding: 13 }}>
               <Row style={{ justifyContent: 'space-between' }}>
-                <Text style={{ fontWeight: '700', color: theme.text, fontSize: 14 }}>{item.brand}</Text>
+                <Text
+                  style={{ fontWeight: '700', color: theme.text, fontSize: 14 }}
+                >
+                  {item.brand}
+                </Text>
                 <Badge
                   text={`${item.differenceML >= 0 ? '+' : ''}${item.differenceML} ml`}
                   color={item.differenceML < 0 ? theme.red : theme.green}
@@ -484,7 +593,10 @@ export default function Bar({ navigation }: { navigation: any }) {
                 />
               </Row>
               <Text style={{ color: theme.faint, fontSize: 12, marginTop: 4 }}>
-                {fmtDate(item.date)} · Book: {item.expectedBottles * item.sizeML + item.expectedLooseML}ml · Physical: {item.actualBottles * item.sizeML + item.actualLooseML}ml
+                {fmtDate(item.date)} · Book:{' '}
+                {item.expectedBottles * item.sizeML + item.expectedLooseML}ml ·
+                Physical:{' '}
+                {item.actualBottles * item.sizeML + item.actualLooseML}ml
               </Text>
             </Card>
           )}
@@ -502,7 +614,7 @@ export default function Bar({ navigation }: { navigation: any }) {
             { key: 'sell', label: 'Sell' },
             { key: 'purchase', label: 'Purchase' },
             { key: 'audit', label: 'Audit' },
-            { key: 'edit', label: 'Update' }
+            { key: 'edit', label: 'Update' },
           ]}
           value={opMode}
           onChange={(val) => setOpMode(val as any)}
@@ -511,57 +623,112 @@ export default function Bar({ navigation }: { navigation: any }) {
         {/* Action Panel: Sell */}
         {opMode === 'sell' && selectedItem && (
           <View>
-            {selectedItem.type !== 'Beer' && (
-              <Segmented
-                options={[
-                  { key: 'peg', label: `Peg 60ml · ${inr(selectedItem.pricePerPeg)}` },
-                  { key: 'bottle', label: `Bottle · ${inr(selectedItem.pricePerBottle)}` }
-                ]}
-                value={sellUnit}
-                onChange={(val) => setSellUnit(val as any)}
+            {selectedItem.type !== 'Beer' ? (
+              <Row style={{ gap: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Field
+                    label="Bottles"
+                    value={bottleQty}
+                    onChangeText={setBottleQty}
+                    keyboardType="numeric"
+                    placeholder="0"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Field
+                    label="Pegs (e.g. 3.5)"
+                    value={pegQty}
+                    onChangeText={setPegQty}
+                    keyboardType="numeric"
+                    placeholder="0"
+                  />
+                </View>
+              </Row>
+            ) : (
+              <Field
+                label="Bottles"
+                value={bottleQty}
+                onChangeText={setBottleQty}
+                keyboardType="numeric"
+                placeholder="0"
               />
             )}
 
-            <Field
-              label={`Quantity (${selectedItem.type === 'Beer' || sellUnit === 'bottle' ? 'bottles' : 'pegs'})`}
-              value={opQty}
-              onChangeText={setOpQty}
-              keyboardType="numeric"
-              placeholder="1"
+            <Select
+              label="Payment"
+              value={paymentMode}
+              onChange={setPaymentMode}
+              options={PAYMENT_MODES}
+              color={theme.amber}
             />
 
-            <Select label="Payment" value={paymentMode} onChange={setPaymentMode} options={PAYMENT_MODES} color={theme.amber} />
-
-            <Card style={{ backgroundColor: theme.cardAlt, marginBottom: 16, padding: 13 }}>
+            <Card
+              style={{
+                backgroundColor: theme.cardAlt,
+                marginBottom: 16,
+                padding: 13,
+              }}
+            >
               <Row style={{ justifyContent: 'space-between' }}>
                 <Text style={{ color: theme.sub }}>Sale amount</Text>
-                <Text style={{ color: theme.green, fontWeight: '800', fontSize: 17 }}>
+                <Text
+                  style={{
+                    color: theme.green,
+                    fontWeight: '800',
+                    fontSize: 17,
+                  }}
+                >
                   {inr(
-                    (selectedItem.type === 'Beer' || sellUnit === 'bottle'
-                      ? selectedItem.pricePerBottle
-                      : selectedItem.pricePerPeg) * Math.max(1, Math.round(parseNum(opQty) || 1))
+                    Math.floor(parseNum(bottleQty) || 0) *
+                      selectedItem.pricePerBottle +
+                      (parseNum(pegQty) || 0) * selectedItem.pricePerPeg,
                   )}
                 </Text>
               </Row>
               <Text style={{ color: theme.faint, fontSize: 11, marginTop: 4 }}>
-                Liquor outside GST · 10% Kerala TOT applies · stock auto-deducted in ml
+                Liquor outside GST · 10% Kerala TOT applies · stock
+                auto-deducted in ml
               </Text>
             </Card>
 
-            <PrimaryButton title="Record Bar Sale" onPress={handleRecordSale} icon="checkmark" color={theme.amber} />
+            <PrimaryButton
+              title="Record Bar Sale"
+              onPress={handleRecordSale}
+              icon="checkmark"
+              color={theme.amber}
+            />
           </View>
         )}
 
         {/* Action Panel: Purchase (BEVCO invoice) */}
         {opMode === 'purchase' && selectedItem && (
           <View>
-            <Field label="Bottles purchased (BEVCO)" value={opQty} onChangeText={setOpQty} keyboardType="numeric" placeholder="12" />
+            <Field
+              label="Bottles purchased (BEVCO)"
+              value={opQty}
+              onChangeText={setOpQty}
+              keyboardType="numeric"
+              placeholder="12"
+            />
 
-            <Card style={{ backgroundColor: theme.cardAlt, marginBottom: 16, padding: 13 }}>
+            <Card
+              style={{
+                backgroundColor: theme.cardAlt,
+                marginBottom: 16,
+                padding: 13,
+              }}
+            >
               <Row style={{ justifyContent: 'space-between' }}>
-                <Text style={{ color: theme.sub }}>Cost @ {inr(selectedItem.costPerBottle)}/btl</Text>
-                <Text style={{ color: theme.red, fontWeight: '800', fontSize: 17 }}>
-                  {inr(selectedItem.costPerBottle * Math.max(1, Math.round(parseNum(opQty) || 1)))}
+                <Text style={{ color: theme.sub }}>
+                  Cost @ {inr(selectedItem.costPerBottle)}/btl
+                </Text>
+                <Text
+                  style={{ color: theme.red, fontWeight: '800', fontSize: 17 }}
+                >
+                  {inr(
+                    selectedItem.costPerBottle *
+                      Math.max(1, Math.round(parseNum(opQty) || 1)),
+                  )}
                 </Text>
               </Row>
               <Text style={{ color: theme.faint, fontSize: 11, marginTop: 4 }}>
@@ -569,16 +736,35 @@ export default function Bar({ navigation }: { navigation: any }) {
               </Text>
             </Card>
 
-            <PrimaryButton title="Record Purchase" onPress={handleRecordPurchase} icon="cart-outline" />
+            <PrimaryButton
+              title="Record Purchase"
+              onPress={handleRecordPurchase}
+              icon="cart-outline"
+            />
           </View>
         )}
 
         {/* Action Panel: Physical Audit */}
         {opMode === 'audit' && selectedItem && (
           <View>
-            <Card style={{ backgroundColor: theme.cardAlt, marginBottom: 16, padding: 13 }}>
-              <Text style={{ color: theme.sub, fontSize: 13 }}>Book stock (expected)</Text>
-              <Text style={{ color: theme.text, fontWeight: '800', fontSize: 18, marginTop: 2 }}>
+            <Card
+              style={{
+                backgroundColor: theme.cardAlt,
+                marginBottom: 16,
+                padding: 13,
+              }}
+            >
+              <Text style={{ color: theme.sub, fontSize: 13 }}>
+                Book stock (expected)
+              </Text>
+              <Text
+                style={{
+                  color: theme.text,
+                  fontWeight: '800',
+                  fontSize: 18,
+                  marginTop: 2,
+                }}
+              >
                 {getMLStock(selectedItem)} ml{' '}
                 <Text style={{ fontSize: 13, color: theme.faint }}>
                   ({selectedItem.fullBottles} btl + {selectedItem.looseML} ml)
@@ -606,16 +792,30 @@ export default function Bar({ navigation }: { navigation: any }) {
         {/* Action Panel: Edit Item Details */}
         {opMode === 'edit' && selectedItem && (
           <View>
-            <Card style={{ backgroundColor: theme.amberSoft, borderColor: theme.amber, marginBottom: 16, padding: 12 }}>
+            <Card
+              style={{
+                backgroundColor: theme.amberSoft,
+                borderColor: theme.amber,
+                marginBottom: 16,
+                padding: 12,
+              }}
+            >
               <Text style={{ color: theme.text, fontSize: 12 }}>
-                Correct stock counts, BEVCO cost and selling prices here. For regular stock-in use the Purchase tab (it
-                posts the expense automatically); use Update for opening stock, price revisions and physical corrections.
+                Correct stock counts, BEVCO cost and selling prices here. For
+                regular stock-in use the Purchase tab (it posts the expense
+                automatically); use Update for opening stock, price revisions
+                and physical corrections.
               </Text>
             </Card>
 
             {renderSharedFormFields()}
 
-            <PrimaryButton title="Save Changes" onPress={handleSaveEdit} icon="save-outline" color={theme.amber} />
+            <PrimaryButton
+              title="Save Changes"
+              onPress={handleSaveEdit}
+              icon="save-outline"
+              color={theme.amber}
+            />
 
             <View style={{ height: 10 }} />
 
@@ -629,20 +829,33 @@ export default function Bar({ navigation }: { navigation: any }) {
                 justifyContent: 'center',
                 gap: 8,
                 borderWidth: 1,
-                borderColor: theme.red
+                borderColor: theme.red,
               }}
             >
               <Ionicons name="trash-outline" size={17} color={theme.red} />
-              <Text style={{ color: theme.red, fontWeight: '700', fontSize: 15 }}>Remove Brand from Register</Text>
+              <Text
+                style={{ color: theme.red, fontWeight: '700', fontSize: 15 }}
+              >
+                Remove Brand from Register
+              </Text>
             </TouchableOpacity>
           </View>
         )}
       </Sheet>
 
       {/* Sheet Modal: Add Brand */}
-      <Sheet visible={addBrandVisible} onClose={() => setAddBrandVisible(false)} title="Add Liquor Brand">
+      <Sheet
+        visible={addBrandVisible}
+        onClose={() => setAddBrandVisible(false)}
+        title="Add Liquor Brand"
+      >
         {renderSharedFormFields()}
-        <PrimaryButton title="Add to Bar Stock" onPress={handleAddNewBrand} icon="add" color={theme.amber} />
+        <PrimaryButton
+          title="Add to Bar Stock"
+          onPress={handleAddNewBrand}
+          icon="add"
+          color={theme.amber}
+        />
       </Sheet>
 
       {/* Floating Add button */}
@@ -665,7 +878,7 @@ export default function Bar({ navigation }: { navigation: any }) {
           shadowColor: '#000',
           shadowOpacity: 0.3,
           shadowRadius: 8,
-          shadowOffset: { width: 0, height: 4 }
+          shadowOffset: { width: 0, height: 4 },
         }}
       >
         <Ionicons name="add" size={30} color="#fff" />

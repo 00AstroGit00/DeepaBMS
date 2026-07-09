@@ -21,8 +21,17 @@ export interface Txn {
   mode: 'cash' | 'bank';
   bankId?: string;
   hasBill?: boolean;
+  attachments?: AttachmentMeta[];
   userId?: string;
   userName?: string;
+}
+
+export interface AttachmentMeta {
+  id: string;
+  name: string;
+  kind: 'image' | 'pdf';
+  uri: string;
+  size?: number;
 }
 
 export interface BankMove {

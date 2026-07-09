@@ -1,7 +1,7 @@
 export const inr = (value: number, maxFractionDigits: number = 0): string => {
   const formatted = Math.abs(value).toLocaleString('en-IN', {
     maximumFractionDigits: maxFractionDigits,
-    minimumFractionDigits: 0
+    minimumFractionDigits: 0,
   });
   return `${value < 0 ? '-' : ''}₹${formatted}`;
 };
@@ -43,7 +43,7 @@ export const fmtDate = (dateStrOrObj: string | Date): string => {
   if (isNaN(d.getTime())) return '—';
   return d.toLocaleDateString('en-IN', {
     day: 'numeric',
-    month: 'short'
+    month: 'short',
   });
 };
 
@@ -53,18 +53,18 @@ export const fmtDateTime = (dateStrOrObj: string | Date): string => {
   if (isNaN(d.getTime())) return '—';
   const datePart = d.toLocaleDateString('en-IN', {
     day: 'numeric',
-    month: 'short'
+    month: 'short',
   });
   const timePart = d.toLocaleTimeString('en-IN', {
     hour: 'numeric',
-    minute: '2-digit'
+    minute: '2-digit',
   });
   return `${datePart}, ${timePart}`;
 };
 
 export const dayLabel = (dateStr: string): string => {
   return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-IN', {
-    weekday: 'short'
+    weekday: 'short',
   });
 };
 
@@ -80,7 +80,9 @@ export const daysBetween = (start: string, end: string): string[] => {
 };
 
 export const uid = (): string => {
-  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+  return (
+    Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
+  );
 };
 
 export const parseNum = (value: string | number): number => {
@@ -89,4 +91,10 @@ export const parseNum = (value: string | number): number => {
   const cleaned = String(value).replace(/[^0-9.]/g, '');
   const parsed = parseFloat(cleaned);
   return isNaN(parsed) ? 0 : parsed;
+};
+
+export const pegStr = (ml: number): string => {
+  const pegs = ml / 60;
+  const n = pegs % 1 === 0 ? String(pegs) : pegs.toFixed(1);
+  return `${n} peg${pegs === 1 ? '' : 's'}`;
 };

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -6,7 +6,8 @@ import {
   View,
   TouchableOpacity,
   Platform,
-  Image
+  Image,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from './context/ThemeContext';
@@ -15,6 +16,12 @@ import { useAuth, User, ROLE_INFO } from './context/AuthContext';
 import { useLayout } from './utils/useLayout';
 import { uid } from './utils/helpers';
 import { constantTimeEqual } from './utils/security';
+import {
+  isBiometricAvailable,
+  authenticate,
+  getBiometricType,
+  BiometricType,
+} from './utils/biometrics';
 
 const ROLE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   owner: 'key',
@@ -23,21 +30,67 @@ const ROLE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   reception: 'desktop',
   fnb: 'restaurant',
   barstaff: 'wine',
-  accountant: 'calculator'
+  accountant: 'calculator',
+};
+
+const BIOMETRIC_ICONS: {
+  [K in Exclude<BiometricType, null>]?: keyof typeof Ionicons.glyphMap;
+} = {
+  fingerprint: 'finger-print',
+  face: 'scan',
 };
 
 export default function Login() {
   const { theme } = useTheme();
   const { state, dispatch } = useStore();
-  const { login } = useAuth();
+  const {
+    login,
+    savedUserId,
+    biometricEnabled,
+    enableBiometric,
+    disableBiometric,
+  } = useAuth();
   const { width } = useLayout();
 
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [pin, setPin] = useState('');
   const [isError, setIsError] = useState(false);
+  const [bioType, setBioType] = useState<BiometricType>(null);
+  const [bioLoading, setBioLoading] = useState(false);
 
   const activeUsers = state.users.filter((u) => u.active);
   const isTabletOrDesktop = width >= 700;
+
+  const savedUser = savedUserId
+    ? state.users.find((u) => u.id === savedUserId && u.active) || null
+    : null;
+
+  useEffect(() => {
+    (async () => {
+      const t = await getBiometricType();
+      setBioType(t);
+    })();
+  }, []);
+
+  const handleBioLogin = async () => {
+    if (!savedUser) return;
+    setBioLoading(true);
+    const ok = await authenticate(`Sign in as ${savedUser.name}`);
+    setBioLoading(false);
+    if (ok) {
+      dispatch({
+        type: 'AUDIT',
+        event: {
+          id: uid(),
+          date: new Date().toISOString(),
+          userId: savedUser.id,
+          userName: savedUser.name,
+          action: 'LOGIN (biometric)',
+        },
+      });
+      login(savedUser);
+    }
+  };
 
   const handleKeyPress = (val: string) => {
     if (!selectedUser) return;
@@ -61,10 +114,11 @@ export default function Login() {
             date: new Date().toISOString(),
             userId: selectedUser.id,
             userName: selectedUser.name,
-            action: 'LOGIN'
-          }
+            action: 'LOGIN',
+          },
         });
         login(selectedUser);
+        tryEnableBiometric(selectedUser);
       } else {
         setIsError(true);
         dispatch({
@@ -74,18 +128,52 @@ export default function Login() {
             date: new Date().toISOString(),
             userId: selectedUser.id,
             userName: selectedUser.name,
-            action: 'LOGIN FAILED (wrong PIN)'
-          }
+            action: 'LOGIN FAILED (wrong PIN)',
+          },
         });
-        // Clear pin after short delay
         setTimeout(() => setPin(''), 350);
       }
     }
   };
 
+  const tryEnableBiometric = async (user: User) => {
+    if (biometricEnabled) return;
+    const avail = await isBiometricAvailable();
+    if (!avail) return;
+    const label = bioType === 'face' ? 'Face ID' : 'Fingerprint';
+    setTimeout(async () => {
+      Alert.alert(
+        'Quick Login',
+        `Enable ${label} to sign in faster next time without entering PIN?`,
+        [
+          { text: 'No, thanks', style: 'cancel' },
+          {
+            text: 'Enable',
+            onPress: async () => {
+              const ok = await authenticate(
+                `Enroll ${label} for ${user.name}`,
+              );
+              if (ok) {
+                await enableBiometric();
+              }
+            },
+          },
+        ],
+      );
+    }, 500);
+  };
+
   if (selectedUser) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <SafeAreaView
+        style={{
+          flex: 1,
+          backgroundColor: theme.bg,
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+        }}
+      >
         <TouchableOpacity
           onPress={() => setSelectedUser(null)}
           style={{
@@ -94,11 +182,13 @@ export default function Login() {
             left: 20,
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 5
+            gap: 5,
           }}
         >
           <Ionicons name="arrow-back" size={19} color={theme.sub} />
-          <Text style={{ color: theme.sub, fontWeight: '600', fontSize: 15 }}>All users</Text>
+          <Text style={{ color: theme.sub, fontWeight: '600', fontSize: 15 }}>
+            All users
+          </Text>
         </TouchableOpacity>
 
         <View
@@ -109,23 +199,42 @@ export default function Login() {
             backgroundColor: theme.primarySoft,
             alignItems: 'center',
             justifyContent: 'center',
-            marginBottom: 12
+            marginBottom: 12,
           }}
         >
-          <Ionicons name={ROLE_ICONS[selectedUser.role] || 'person'} size={27} color={theme.primary} />
+          <Ionicons
+            name={ROLE_ICONS[selectedUser.role] || 'person'}
+            size={27}
+            color={theme.primary}
+          />
         </View>
 
-        <Text style={{ fontSize: 19, fontWeight: '800', color: theme.text }}>{selectedUser.name}</Text>
+        <Text style={{ fontSize: 19, fontWeight: '800', color: theme.text }}>
+          {selectedUser.name}
+        </Text>
         <Text style={{ fontSize: 13, color: theme.sub, marginTop: 3 }}>
           {ROLE_INFO[selectedUser.role]?.label || selectedUser.role}
         </Text>
 
-        <Text style={{ fontSize: 14, color: isError ? theme.red : theme.sub, marginTop: 24, fontWeight: '600' }}>
+        <Text
+          style={{
+            fontSize: 14,
+            color: isError ? theme.red : theme.sub,
+            marginTop: 24,
+            fontWeight: '600',
+          }}
+        >
           {isError ? 'Wrong PIN — try again' : 'Enter your 4-digit PIN'}
         </Text>
 
-        {/* PIN Indicators */}
-        <View style={{ flexDirection: 'row', gap: 14, marginTop: 16, marginBottom: 26 }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            gap: 14,
+            marginTop: 16,
+            marginBottom: 26,
+          }}
+        >
           {[0, 1, 2, 3].map((idx) => (
             <View
               key={idx}
@@ -133,43 +242,70 @@ export default function Login() {
                 width: 15,
                 height: 15,
                 borderRadius: 8,
-                backgroundColor: idx < pin.length ? (isError ? theme.red : theme.primary) : theme.border
+                backgroundColor:
+                  idx < pin.length
+                    ? isError
+                      ? theme.red
+                      : theme.primary
+                    : theme.border,
               }}
             />
           ))}
         </View>
 
-        {/* Keypad */}
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: 272, justifyContent: 'center' }}>
-          {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'].map((key, idx) => {
-            if (key === '') {
-              return <View key={idx} style={{ width: 74, height: 74, margin: 8 }} />;
-            }
-            return (
-              <TouchableOpacity
-                key={idx}
-                onPress={() => handleKeyPress(key)}
-                accessibilityLabel={key === 'del' ? 'Delete' : `Digit ${key}`}
-                style={{
-                  width: 74,
-                  height: 74,
-                  margin: 8,
-                  borderRadius: 37,
-                  backgroundColor: theme.card,
-                  borderWidth: 1,
-                  borderColor: theme.border,
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                {key === 'del' ? (
-                  <Ionicons name="backspace-outline" size={23} color={theme.sub} />
-                ) : (
-                  <Text style={{ fontSize: 25, fontWeight: '700', color: theme.text }}>{key}</Text>
-                )}
-              </TouchableOpacity>
-            );
-          })}
+        <View
+          style={{
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            width: 272,
+            justifyContent: 'center',
+          }}
+        >
+          {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'].map(
+            (key, idx) => {
+              if (key === '') {
+                return (
+                  <View key={idx} style={{ width: 74, height: 74, margin: 8 }} />
+                );
+              }
+              return (
+                <TouchableOpacity
+                  key={idx}
+                  onPress={() => handleKeyPress(key)}
+                  accessibilityLabel={key === 'del' ? 'Delete' : `Digit ${key}`}
+                  style={{
+                    width: 74,
+                    height: 74,
+                    margin: 8,
+                    borderRadius: 37,
+                    backgroundColor: theme.card,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {key === 'del' ? (
+                    <Ionicons
+                      name="backspace-outline"
+                      size={23}
+                      color={theme.sub}
+                    />
+                  ) : (
+                    <Text
+                      style={{
+                        fontSize: 25,
+                        fontWeight: '700',
+                        color: theme.text,
+                      }}
+                    >
+                      {key}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              );
+            },
+          )}
         </View>
       </SafeAreaView>
     );
@@ -187,17 +323,144 @@ export default function Login() {
             marginTop: 24,
             marginBottom: 14,
             resizeMode: 'contain',
-            opacity: 0.8
+            opacity: 0.8,
           }}
         />
 
-        <Text style={{ fontSize: 22, fontWeight: '800', color: theme.text }}>Deepa BMS</Text>
+        <Text style={{ fontSize: 22, fontWeight: '800', color: theme.text }}>
+          Deepa BMS
+        </Text>
         <Text style={{ fontSize: 13, color: theme.sub, marginTop: 4, marginBottom: 26 }}>
           Restaurant & Tourist Home · Cherpulassery
         </Text>
 
-        <Text style={{ fontSize: 14, fontWeight: '700', color: theme.sub, marginBottom: 14, letterSpacing: 0.5 }}>
-          WHO IS SIGNING IN?
+        {/* Biometric Quick Login */}
+        {savedUser && biometricEnabled && bioType && (
+          <TouchableOpacity
+            onPress={handleBioLogin}
+            disabled={bioLoading}
+            style={{
+              width: '100%',
+              maxWidth: 720,
+              backgroundColor: theme.card,
+              borderWidth: 1.5,
+              borderColor: theme.primary,
+              borderRadius: 16,
+              padding: 18,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 14,
+              marginBottom: 18,
+              opacity: bioLoading ? 0.6 : 1,
+            }}
+          >
+            <View
+              style={{
+                width: 50,
+                height: 50,
+                borderRadius: 14,
+                backgroundColor: theme.primarySoft,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Ionicons
+                name={BIOMETRIC_ICONS[bioType]}
+                size={26}
+                color={theme.primary}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontWeight: '800',
+                  color: theme.text,
+                  fontSize: 15,
+                }}
+              >
+                {bioLoading ? 'Authenticating...' : `Quick sign in`}
+              </Text>
+              <Text style={{ color: theme.sub, fontSize: 12, marginTop: 2 }}>
+                {savedUser.name} ·{' '}
+                {ROLE_INFO[savedUser.role]?.label || savedUser.role}
+              </Text>
+            </View>
+            <Ionicons
+              name={
+                bioType === 'face'
+                  ? 'scan-outline'
+                  : 'finger-print-outline'
+              }
+              size={22}
+              color={theme.primary}
+            />
+          </TouchableOpacity>
+        )}
+
+        {/* Biometric Quick Login disabled fallback */}
+        {savedUser && !biometricEnabled && (
+          <TouchableOpacity
+            onPress={() => {
+              setSelectedUser(savedUser);
+              setPin('');
+              setIsError(false);
+            }}
+            style={{
+              width: '100%',
+              maxWidth: 720,
+              backgroundColor: theme.card,
+              borderWidth: 1,
+              borderColor: theme.border,
+              borderRadius: 16,
+              padding: 14,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 13,
+              marginBottom: 18,
+            }}
+          >
+            <View
+              style={{
+                width: 46,
+                height: 46,
+                borderRadius: 14,
+                backgroundColor: theme.primarySoft,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Ionicons
+                name={ROLE_ICONS[savedUser.role] || 'person'}
+                size={21}
+                color={theme.primary}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{ fontWeight: '800', color: theme.text, fontSize: 15 }}
+              >
+                {savedUser.name}
+              </Text>
+              <Text style={{ color: theme.sub, fontSize: 12, marginTop: 2 }}>
+                {ROLE_INFO[savedUser.role]?.label || savedUser.role}
+              </Text>
+            </View>
+            <Text style={{ color: theme.faint, fontSize: 12, fontWeight: '600' }}>
+              Sign in
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        <Text
+          style={{
+            fontSize: 14,
+            fontWeight: '700',
+            color: theme.sub,
+            marginBottom: 14,
+            letterSpacing: 0.5,
+          }}
+        >
+          {savedUser ? 'OR SIGN IN AS A DIFFERENT USER' : 'WHO IS SIGNING IN?'}
         </Text>
 
         {/* User profile list */}
@@ -208,7 +471,7 @@ export default function Login() {
             flexDirection: isTabletOrDesktop ? 'row' : 'column',
             flexWrap: 'wrap',
             gap: 10,
-            justifyContent: 'center'
+            justifyContent: 'center',
           }}
         >
           {activeUsers.map((user) => {
@@ -230,7 +493,7 @@ export default function Login() {
                   padding: 14,
                   flexDirection: 'row',
                   alignItems: 'center',
-                  gap: 13
+                  gap: 13,
                 }}
               >
                 <View
@@ -240,15 +503,32 @@ export default function Login() {
                     borderRadius: 14,
                     backgroundColor: theme.primarySoft,
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
                   }}
                 >
-                  <Ionicons name={ROLE_ICONS[user.role] || 'person'} size={21} color={theme.primary} />
+                  <Ionicons
+                    name={ROLE_ICONS[user.role] || 'person'}
+                    size={21}
+                    color={theme.primary}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontWeight: '800', color: theme.text, fontSize: 15 }}>{user.name}</Text>
-                  <Text style={{ color: theme.sub, fontSize: 12, marginTop: 2 }}>{roleDetail?.label || user.role}</Text>
-                  <Text style={{ color: theme.faint, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                  <Text
+                    style={{
+                      fontWeight: '800',
+                      color: theme.text,
+                      fontSize: 15,
+                    }}
+                  >
+                    {user.name}
+                  </Text>
+                  <Text style={{ color: theme.sub, fontSize: 12, marginTop: 2 }}>
+                    {roleDetail?.label || user.role}
+                  </Text>
+                  <Text
+                    style={{ color: theme.faint, fontSize: 11, marginTop: 2 }}
+                    numberOfLines={1}
+                  >
                     {roleDetail?.desc}
                   </Text>
                 </View>
@@ -265,11 +545,19 @@ export default function Login() {
             borderRadius: 12,
             padding: 14,
             maxWidth: 720,
-            width: '100%'
+            width: '100%',
           }}
         >
-          <Text style={{ color: theme.faint, fontSize: 12, textAlign: 'center', lineHeight: 18 }}>
-            Demo PINs — Owner 1234 · Manager 2345 · Cashier 3456 · Reception 4567 · F&B 5678 · Bar 6789
+          <Text
+            style={{
+              color: theme.faint,
+              fontSize: 12,
+              textAlign: 'center',
+              lineHeight: 18,
+            }}
+          >
+            Demo PINs — Owner 1234 · Manager 2345 · Cashier 3456 · Reception
+            4567 · F&B 5678 · Bar 6789
             {'\n'}
             Each role sees only the modules it is permitted to use.
           </Text>

@@ -118,49 +118,53 @@ export default function Inventory({ navigation }: { navigation: any }) {
         ? 'Kitchen issue'
         : 'Wastage';
 
-    const move = {
-      id: uid(),
-      date: new Date().toISOString(),
-      itemId: selectedItem.id,
-      itemName: selectedItem.name,
-      kind: moveKind,
-      qty,
-      note: moveNote.trim() || defaultNote
-    };
+    try {
+      const move = {
+        id: uid(),
+        date: new Date().toISOString(),
+        itemId: selectedItem.id,
+        itemName: selectedItem.name,
+        kind: moveKind,
+        qty,
+        note: moveNote.trim() || defaultNote,
+      };
 
-    dispatch({
-      type: 'STOCK_MOVE',
-      move
-    });
-
-    setSelectedItem(null);
-    setMoveQty('');
-    setMoveNote('');
+      dispatch({
+        type: 'STOCK_MOVE',
+        move,
+      });
+    } finally {
+      setSelectedItem(null);
+      setMoveQty('');
+      setMoveNote('');
+    }
   };
 
   const handleAddNewItem = () => {
     if (!newItemName.trim()) return;
 
-    const item = {
-      id: uid(),
-      name: newItemName.trim(),
-      category: newItemCategory,
-      unit: newItemUnit.trim() || 'pc',
-      stock: parseNum(openingStock) || 0,
-      reorder: parseNum(reorderLevel) || 0,
-      cost: parseNum(costPerUnit) || 0
-    };
+    try {
+      const item = {
+        id: uid(),
+        name: newItemName.trim(),
+        category: newItemCategory,
+        unit: newItemUnit.trim() || 'pc',
+        stock: parseNum(openingStock) || 0,
+        reorder: parseNum(reorderLevel) || 0,
+        cost: parseNum(costPerUnit) || 0,
+      };
 
-    dispatch({
-      type: 'ADD_INV_ITEM',
-      item
-    });
-
-    setAddSheetVisible(false);
-    setNewItemName('');
-    setOpeningStock('');
-    setReorderLevel('');
-    setCostPerUnit('');
+      dispatch({
+        type: 'ADD_INV_ITEM',
+        item,
+      });
+    } finally {
+      setAddSheetVisible(false);
+      setNewItemName('');
+      setOpeningStock('');
+      setReorderLevel('');
+      setCostPerUnit('');
+    }
   };
 
   return (

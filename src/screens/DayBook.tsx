@@ -192,30 +192,33 @@ export default function DayBook({ navigation }: { navigation: any }) {
   };
 
   const handleSaveEntry = () => {
-    const parsedAmt = parseNum(amount);
-    if (!parsedAmt || !description.trim()) return;
+    try {
+      const parsedAmt = parseNum(amount);
+      if (!parsedAmt || !description.trim()) return;
 
-    const txnId = uid();
-    const txn = {
-      id: txnId,
-      date: new Date().toISOString(),
-      kind,
-      category,
-      description: description.trim(),
-      amount: parsedAmt,
-      mode,
-      bankId: mode === 'bank' ? state.settings.defaultBankId : undefined,
-      hasBill: attachments.length > 0,
-      attachments: attachments.length ? attachments : undefined,
-      userId: currentUser?.id,
-      userName: currentUser?.name
-    };
+      const txnId = uid();
+      const txn = {
+        id: txnId,
+        date: new Date().toISOString(),
+        kind,
+        category,
+        description: description.trim(),
+        amount: parsedAmt,
+        mode,
+        bankId: mode === 'bank' ? state.settings.defaultBankId : undefined,
+        hasBill: attachments.length > 0,
+        attachments: attachments.length ? attachments : undefined,
+        userId: currentUser?.id,
+        userName: currentUser?.name,
+      };
 
-    dispatch({ type: 'ADD_TXN', txn });
-    setNewEntryVisible(false);
-    setDescription('');
-    setAmount('');
-    setAttachments([]);
+      dispatch({ type: 'ADD_TXN', txn });
+    } finally {
+      setNewEntryVisible(false);
+      setDescription('');
+      setAmount('');
+      setAttachments([]);
+    }
   };
 
   const dayLabelText =

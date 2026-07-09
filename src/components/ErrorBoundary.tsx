@@ -15,7 +15,7 @@ interface State {
 export class ErrorBoundary extends Component<Props, State> {
   public state: State = { hasError: false };
   public static contextType = ThemeContext;
-  public context!: React.ContextType<typeof ThemeContext>;
+  public context: React.ContextType<typeof ThemeContext> = null!;
 
   public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };

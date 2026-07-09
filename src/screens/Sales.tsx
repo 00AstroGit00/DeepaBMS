@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useStore } from '../context/StoreContext';
+import { ThermalPrinter } from '../utils/ThermalPrinter';
 import {
   Card,
   Row,
@@ -280,7 +281,13 @@ export default function Sales({ navigation }: { navigation: any }) {
               </Text>
             </View>
 
-            <View style={{ alignItems: 'flex-end' }}>
+            <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
+              <TouchableOpacity 
+                style={{ padding: 6, backgroundColor: theme.cardAlt, borderRadius: 6, marginBottom: 8 }}
+                onPress={() => ThermalPrinter.printReceipt(item, state.settings.businessName, state.settings.gstin)}
+              >
+                <Ionicons name="print-outline" size={16} color={theme.primary} />
+              </TouchableOpacity>
               <Text style={{ fontWeight: '800', fontSize: 15, color: theme.text }}>
                 {inr(item.total)}
               </Text>

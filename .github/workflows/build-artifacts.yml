@@ -26,6 +26,9 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Setup Gradle Cache
+        uses: gradle/actions/setup-gradle@v3
+
       - name: Install dependencies
         run: npm ci
 
@@ -35,6 +38,7 @@ jobs:
           expo-version: latest
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
+        continue-on-error: true
 
       - name: Prebuild Android project
         run: npx expo prebuild --platform android
@@ -61,6 +65,16 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
+
+      - name: Cache Electron Binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: ${{ runner.os }}-electron-cache-${{ hashFiles('apps/windows/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-cache-
 
       - name: Build Web Bundle
         run: |

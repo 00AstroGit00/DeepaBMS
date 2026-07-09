@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useReducer, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useRef, useCallback, useState } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { keyOf, todayKey, uid } from '../utils/helpers';
 import { User } from './AuthContext';
@@ -26,7 +27,10 @@ export interface Txn {
   mode: 'cash' | 'bank';
   bankId?: string;
   hasBill?: boolean;
+  userId?: string;
+  userName?: string;
 }
+
 
 export interface BankMove {
   id: string;
@@ -235,6 +239,8 @@ export interface GeneralSettings {
   openingCash: number;
   pin: string;
   defaultBankId: string;
+  serverUrl?: string;
+  lastSyncedAt?: string;
 }
 
 export interface AuditEvent {
@@ -308,6 +314,7 @@ export type Action =
   | { type: 'RESET_DEMO' };
 
 const STORAGE_KEY = 'deepa-bms-v4';
+const SERVER_URL_KEY = '@DeepaBMS:serverUrl'; // stored separately so Reset Demo never clears it
 
 // Deterministic seed builder
 export const buildSeed = (): GlobalState => {
@@ -795,7 +802,9 @@ export const buildSeed = (): GlobalState => {
       gstin: '32AAXPD1234K1ZR',
       openingCash: 42000,
       pin: '1234',
-      defaultBankId: defaultBankId
+      defaultBankId: defaultBankId,
+      serverUrl: '',
+      lastSyncedAt: ''
     }
   };
 };
@@ -1138,8 +1147,19 @@ export function reducer(state: GlobalState, action: Action): GlobalState {
         auditLog: [action.event, ...state.auditLog].slice(0, 500)
       };
 
-    case 'RESET_DEMO':
-      return buildSeed();
+    case 'RESET_DEMO': {
+      // Preserve server URL across demo resets — cashier shouldn't lose sync config
+      const { serverUrl, lastSyncedAt } = state.settings;
+      const seed = buildSeed();
+      return {
+        ...seed,
+        settings: {
+          ...seed.settings,
+          serverUrl: serverUrl || '',
+          lastSyncedAt: lastSyncedAt || ''
+        }
+      };
+    }
 
     default:
       return state;
@@ -1343,20 +1363,136 @@ export const inventoryValue = (state: GlobalState): number => {
   return state.inventory.reduce((sum, item) => sum + item.stock * item.cost, 0);
 };
 
+// ─── Sync status ────────────────────────────────────────────────────────────
+export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline' | 'no-server';
+
 // Store context
 export interface StoreContextType {
   state: GlobalState;
   dispatch: React.Dispatch<Action>;
+  syncStatus: SyncStatus;
+  syncNow: () => Promise<void>;
 }
 
 const StoreContext = createContext<StoreContextType>({
   state: initialState,
-  dispatch: () => {}
+  dispatch: () => {},
+  syncStatus: 'idle',
+  syncNow: async () => {}
 });
+
+// ─── Write-action types (triggers auto-sync to server) ───────────────────────
+const WRITE_ACTIONS = new Set<string>([
+  'ADD_SALE', 'ADD_TXN', 'PAY_SALARIES', 'ADD_BANK_MOVE', 'ADD_BANK_STATEMENT',
+  'REMOVE_BANK_STATEMENT', 'CHECK_IN', 'CHECK_OUT', 'SET_ROOM_STATUS',
+  'ADD_INV_ITEM', 'STOCK_MOVE', 'SELL_LIQUOR', 'LIQUOR_PURCHASE', 'LIQUOR_AUDIT',
+  'ADD_LIQUOR_ITEM', 'UPDATE_LIQUOR_ITEM', 'REMOVE_LIQUOR_ITEM',
+  'ADD_CREDIT_ACCOUNT', 'CREDIT_ENTRY', 'ADD_EMPLOYEE', 'UPDATE_EMPLOYEE',
+  'MARK_ATTENDANCE', 'BULK_ATTENDANCE', 'ADD_ADVANCE', 'REQUEST_LEAVE',
+  'DECIDE_LEAVE', 'ADD_REVIEW', 'ADD_EMP_DOC', 'REMOVE_EMP_DOC',
+  'ADD_ANNOUNCEMENT', 'REMOVE_ANNOUNCEMENT', 'SET_PIN', 'ADD_USER',
+  'UPDATE_USER', 'REMOVE_USER', 'AUDIT'
+]);
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(reducer, initialState);
   const isLoaded = useRef(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
+
+  // Refs to avoid stale closure issues in intervals/callbacks
+  const stateRef = useRef(state);
+  const syncDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isSyncingRef = useRef(false);
+  useEffect(() => { stateRef.current = state; }, [state]);
+
+  // ─── Core sync function ─────────────────────────────────────────────────
+  const syncNow = useCallback(async (silent = false): Promise<void> => {
+    const currentState = stateRef.current;
+    const serverUrl = currentState.settings?.serverUrl?.trim();
+    if (!serverUrl || !currentState.ready) {
+      if (!silent) setSyncStatus('no-server');
+      return;
+    }
+    if (isSyncingRef.current) return; // prevent overlapping syncs
+    isSyncingRef.current = true;
+    setSyncStatus('syncing');
+
+    let targetUrl = serverUrl;
+    if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+      targetUrl = 'http://' + targetUrl;
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch(`${targetUrl}/api/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: currentState }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const mergedState = await res.json();
+
+      // Preserve local serverUrl and update lastSyncedAt
+      mergedState.settings = {
+        ...mergedState.settings,
+        serverUrl: serverUrl,
+        lastSyncedAt: new Date().toLocaleDateString('en-IN', {
+          day: '2-digit', month: 'short', year: 'numeric'
+        }) + ', ' + new Date().toLocaleTimeString('en-IN', {
+          hour: '2-digit', minute: '2-digit'
+        })
+      };
+
+      dispatch({ type: 'HYDRATE', state: mergedState });
+      setSyncStatus('synced');
+
+      // Reset to idle after 3 seconds
+      setTimeout(() => setSyncStatus('idle'), 3000);
+    } catch {
+      setSyncStatus('offline');
+      // Reset to idle after 8 seconds so UI doesn't stay alarming
+      setTimeout(() => setSyncStatus('idle'), 8000);
+    } finally {
+      isSyncingRef.current = false;
+    }
+  }, []);
+
+  // ─── Dispatch wrapper that triggers debounced auto-sync on writes ────────
+  const dispatchAndSync = useCallback((action: Action) => {
+    dispatch(action);
+    if (WRITE_ACTIONS.has(action.type) && stateRef.current.settings?.serverUrl?.trim()) {
+      // Debounce: wait 2s after last rapid entry before syncing
+      if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
+      syncDebounceRef.current = setTimeout(() => {
+        syncNow(true);
+      }, 2000);
+    }
+  }, [syncNow]);
+
+  // ─── Background polling every 30 seconds ────────────────────────────────
+  useEffect(() => {
+    const pollInterval = setInterval(() => {
+      if (stateRef.current.settings?.serverUrl?.trim() && stateRef.current.ready) {
+        syncNow(true);
+      }
+    }, 30000);
+    return () => clearInterval(pollInterval);
+  }, [syncNow]);
+
+  // ─── Sync on app foreground restore ─────────────────────────────────────
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      if (nextState === 'active' && stateRef.current.settings?.serverUrl?.trim()) {
+        syncNow(true);
+      }
+    });
+    return () => subscription.remove();
+  }, [syncNow]);
 
   // 1. Hydrate state
   useEffect(() => {
@@ -1399,6 +1535,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           }));
 
           dispatch({ type: 'HYDRATE', state: parsed });
+
+          // Restore serverUrl from its own separate key (survives reset)
+          const savedServerUrl = await AsyncStorage.getItem(SERVER_URL_KEY);
+          if (savedServerUrl && !parsed.settings?.serverUrl) {
+            dispatch({
+              type: 'HYDRATE',
+              state: { settings: { ...(parsed.settings || {}), serverUrl: savedServerUrl } }
+            });
+          }
+
+          // Immediately sync with server after hydration if server is configured
+          if ((parsed.settings?.serverUrl || savedServerUrl)?.trim()) {
+            setTimeout(() => syncNow(true), 1500);
+          }
         } else {
           dispatch({ type: 'HYDRATE', state: buildSeed() });
         }
@@ -1408,17 +1558,21 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         isLoaded.current = true;
       }
     })();
-  }, []);
+  }, [syncNow]);
 
-  // 2. Persist state
+  // 2. Persist state + separately persist serverUrl so it survives Reset Demo
   useEffect(() => {
     if (isLoaded.current && state.ready) {
       AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => {});
+      // Keep serverUrl in its own key — unaffected by state resets
+      if (state.settings?.serverUrl) {
+        AsyncStorage.setItem(SERVER_URL_KEY, state.settings.serverUrl).catch(() => {});
+      }
     }
   }, [state]);
 
   return (
-    <StoreContext.Provider value={{ state, dispatch }}>
+    <StoreContext.Provider value={{ state, dispatch: dispatchAndSync, syncStatus, syncNow: () => syncNow(false) }}>
       {children}
     </StoreContext.Provider>
   );

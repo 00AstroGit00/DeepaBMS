@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,12 @@ import {
   ScrollView,
   SafeAreaView,
   Platform,
-  Alert
+  Alert,
+  Animated
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from './context/ThemeContext';
-import { useStore, cashInHand } from './context/StoreContext';
+import { useStore, cashInHand, SyncStatus } from './context/StoreContext';
 import { useAuth, ROLE_INFO } from './context/AuthContext';
 import { useLayout } from './utils/useLayout';
 import { inr, uid } from './utils/helpers';
@@ -82,9 +83,91 @@ const MENU_ITEMS: MenuItem[] = [
 
 export default function Layout() {
   const { theme, toggle: toggleTheme } = useTheme();
-  const { state, dispatch } = useStore();
+  const { state, dispatch, syncStatus, syncNow } = useStore();
   const { currentUser, logout, can } = useAuth();
   const { width } = useLayout();
+
+  // ── Animated pulsing dot for 'syncing' state ──────────────────────────────
+  const pulseAnim = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    let loop: Animated.CompositeAnimation | null = null;
+    if (syncStatus === 'syncing') {
+      loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 0.4, duration: 700, useNativeDriver: true })
+        ])
+      );
+      loop.start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+    return () => { if (loop) loop.stop(); };
+  }, [syncStatus, pulseAnim]);
+
+  const syncDotColor = (s: SyncStatus): string => {
+    if (s === 'synced') return theme.green;
+    if (s === 'syncing') return theme.amber || '#f59e0b';
+    if (s === 'offline') return theme.red;
+    if (s === 'no-server') return theme.faint;
+    return theme.faint;
+  };
+
+  const syncLabel = (s: SyncStatus): string => {
+    if (s === 'synced') return 'Synced ✓';
+    if (s === 'syncing') return 'Syncing…';
+    if (s === 'offline') return 'Server offline';
+    if (s === 'no-server') return 'Tap to configure';
+    return state.settings.lastSyncedAt
+      ? `Last: ${state.settings.lastSyncedAt.split(',')[1]?.trim() || 'today'}`
+      : 'Tap to sync';
+  };
+
+  const SyncBadge = ({ compact }: { compact?: boolean }) => (
+    <TouchableOpacity
+      onPress={syncNow}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: compact ? 4 : 6,
+        backgroundColor: theme.cardAlt,
+        paddingHorizontal: compact ? 7 : 10,
+        paddingVertical: compact ? 4 : 6,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: syncStatus === 'offline' ? theme.red
+          : syncStatus === 'synced' ? theme.green
+          : theme.border
+      }}
+    >
+      {/* Animated dot — pulses while syncing */}
+      <Animated.View
+        style={{
+          width: compact ? 6 : 7,
+          height: compact ? 6 : 7,
+          borderRadius: 4,
+          backgroundColor: syncDotColor(syncStatus),
+          opacity: syncStatus === 'syncing' ? pulseAnim : 1
+        }}
+      />
+      {!compact && (
+        <Text style={{
+          color: syncStatus === 'offline' ? theme.red
+            : syncStatus === 'synced' ? theme.green
+            : theme.faint,
+          fontSize: 11,
+          fontWeight: '700'
+        }}>
+          {syncLabel(syncStatus)}
+        </Text>
+      )}
+      <Ionicons
+        name={syncStatus === 'syncing' ? 'sync' : 'sync-outline'}
+        size={compact ? 11 : 13}
+        color={syncStatus === 'offline' ? theme.red : theme.faint}
+      />
+    </TouchableOpacity>
+  );
 
   const allowedItems = MENU_ITEMS.filter((item) => item.perm === null || can(item.perm));
   const initialScreen = allowedItems[0]?.key || 'Settings';
@@ -186,6 +269,7 @@ export default function Layout() {
               <Text style={{ fontWeight: '900', color: theme.text, fontSize: 16 }}>Deepa BMS</Text>
               <Text style={{ color: theme.faint, fontSize: 11 }}>Cherpulassery</Text>
             </View>
+            <SyncBadge compact />
           </View>
 
           {/* User Section */}
@@ -297,6 +381,11 @@ export default function Layout() {
               </View>
             )}
 
+            {/* Sync status widget */}
+            {state.settings.serverUrl ? (
+              <SyncBadge />
+            ) : null}
+
             <TouchableOpacity
               onPress={toggleTheme}
               style={{
@@ -352,34 +441,37 @@ export default function Layout() {
         <Text style={{ fontSize: 18, fontWeight: '900', color: theme.text }}>
           {MENU_ITEMS.find((m) => m.key === currentScreen)?.label || 'Deepa BMS'}
         </Text>
-        {currentUser && (
-          <TouchableOpacity
-            onPress={() => {
-              if (Platform.OS === 'web') {
-                if (window.confirm('Sign out of your session?')) handleSignOut();
-              } else {
-                Alert.alert('Sign Out', 'Sign out of your session?', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Sign Out', style: 'destructive', onPress: handleSignOut }
-                ]);
-              }
-            }}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 6,
-              backgroundColor: theme.primarySoft,
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 8
-            }}
-          >
-            <Ionicons name={ROLE_ICONS[currentUser.role]} size={14} color={theme.primary} />
-            <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 12 }}>
-              {currentUser.name.split(' ')[0]}
-            </Text>
-          </TouchableOpacity>
-        )}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {state.settings.serverUrl ? <SyncBadge compact /> : null}
+          {currentUser && (
+            <TouchableOpacity
+              onPress={() => {
+                if (Platform.OS === 'web') {
+                  if (window.confirm('Sign out of your session?')) handleSignOut();
+                } else {
+                  Alert.alert('Sign Out', 'Sign out of your session?', [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Sign Out', style: 'destructive', onPress: handleSignOut }
+                  ]);
+                }
+              }}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                backgroundColor: theme.primarySoft,
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 8
+              }}
+            >
+              <Ionicons name={ROLE_ICONS[currentUser.role]} size={14} color={theme.primary} />
+              <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 12 }}>
+                {currentUser.name.split(' ')[0]}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* Main Screen Content */}

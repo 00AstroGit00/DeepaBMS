@@ -21,8 +21,9 @@ function createWindow() {
   // Load the web export output
   const webIndexPath = path.join(__dirname, 'web', 'index.html');
   mainWindow.loadFile(webIndexPath).catch(() => {
-    // If not packaged, load the local webpack development server
-    mainWindow.loadURL('http://localhost:19006');
+    // If not packaged, load the local development server (defaults to port 8081 in Expo v51+)
+    const devUrl = process.env.ELECTRON_DEV_URL || 'http://localhost:8081';
+    mainWindow.loadURL(devUrl);
   });
 
   mainWindow.on('closed', () => {

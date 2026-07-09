@@ -38,14 +38,19 @@ export const lastNDays = (daysCount: number): string[] => {
 };
 
 export const fmtDate = (dateStrOrObj: string | Date): string => {
-  return new Date(dateStrOrObj).toLocaleDateString('en-IN', {
+  if (!dateStrOrObj) return '—';
+  const d = new Date(dateStrOrObj);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-IN', {
     day: 'numeric',
     month: 'short'
   });
 };
 
 export const fmtDateTime = (dateStrOrObj: string | Date): string => {
+  if (!dateStrOrObj) return '—';
   const d = new Date(dateStrOrObj);
+  if (isNaN(d.getTime())) return '—';
   const datePart = d.toLocaleDateString('en-IN', {
     day: 'numeric',
     month: 'short'

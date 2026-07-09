@@ -276,6 +276,29 @@ export default function Settings({ navigation }: { navigation: any }) {
           </View>
         )}
 
+        {/* Analysis & Reports (visible if user has reports access) */}
+        {can('reports') && (
+          <View>
+            <SectionTitle>Analysis & Reports</SectionTitle>
+            {renderSettingRow(
+              'Reports & GST Statements',
+              'Generate P&L, Day Book, GST returns, and register exports',
+              'stats-chart-outline',
+              theme.primary,
+              theme.primarySoft,
+              () => navigation.navigate('Reports')
+            )}
+            {renderSettingRow(
+              'Analytics Board',
+              'Charts and insights of monthly business metrics',
+              'pie-chart-outline',
+              theme.blue,
+              theme.blueSoft,
+              () => navigation.navigate('Analytics')
+            )}
+          </View>
+        )}
+
         {/* Data & Security parameters */}
         <SectionTitle>Data & Security</SectionTitle>
         {can('users') &&

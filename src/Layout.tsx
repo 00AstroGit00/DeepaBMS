@@ -199,9 +199,9 @@ export default function Layout() {
         Users: 'Users'
       };
 
-      let target = routeMap[tabName];
-      if (tabName === 'MoreTab' && params?.screen && routeMap[params.screen]) {
-        target = routeMap[params.screen];
+      let target = routeMap[tabName] || tabName;
+      if (tabName === 'MoreTab' && params?.screen && (routeMap[params.screen] || params.screen)) {
+        target = routeMap[params.screen] || params.screen;
       }
 
       const targetScreen = target || 'Dashboard';

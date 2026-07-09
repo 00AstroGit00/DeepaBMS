@@ -281,7 +281,7 @@ export default function Hotel({ navigation }: { navigation: any }) {
               </Row>
               <Text style={{ color: theme.faint, fontSize: 12, marginTop: 4 }}>
                 Room {item.roomNo} · {item.nights}N · {fmtDate(item.checkIn)} → {fmtDate(item.checkOut)} ·{' '}
-                {item.mode.toUpperCase()}
+                {item.mode?.toUpperCase() || ''}
               </Text>
             </Card>
           )}

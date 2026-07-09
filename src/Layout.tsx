@@ -7,7 +7,8 @@ import {
   SafeAreaView,
   Platform,
   Alert,
-  Animated
+  Animated,
+  Image
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from './context/ThemeContext';
@@ -253,18 +254,16 @@ export default function Layout() {
               gap: 11
             }}
           >
-            <View
+            <Image
+              source={require('../assets/logo.png')}
               style={{
-                width: 40,
-                height: 40,
-                borderRadius: 12,
-                backgroundColor: theme.primary,
-                alignItems: 'center',
-                justifyContent: 'center'
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                resizeMode: 'contain',
+                opacity: 0.85
               }}
-            >
-              <Ionicons name="restaurant" size={20} color="#fff" />
-            </View>
+            />
             <View style={{ flex: 1 }}>
               <Text style={{ fontWeight: '900', color: theme.text, fontSize: 16 }}>Deepa BMS</Text>
               <Text style={{ color: theme.faint, fontSize: 11 }}>Cherpulassery</Text>

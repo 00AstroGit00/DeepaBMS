@@ -5,7 +5,8 @@ import {
   Text,
   View,
   TouchableOpacity,
-  Platform
+  Platform,
+  Image
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from './context/ThemeContext';
@@ -175,20 +176,18 @@ export default function Login() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <ScrollView contentContainerStyle={{ padding: 24, alignItems: 'center' }}>
-        <View
+        <Image
+          source={require('../assets/logo.png')}
           style={{
-            width: 68,
-            height: 68,
-            borderRadius: 20,
-            backgroundColor: theme.primary,
-            alignItems: 'center',
-            justifyContent: 'center',
+            width: 56,
+            height: 56,
+            borderRadius: 14,
             marginTop: 24,
-            marginBottom: 14
+            marginBottom: 14,
+            resizeMode: 'contain',
+            opacity: 0.8
           }}
-        >
-          <Ionicons name="restaurant" size={32} color="#fff" />
-        </View>
+        />
 
         <Text style={{ fontSize: 22, fontWeight: '800', color: theme.text }}>Deepa BMS</Text>
         <Text style={{ fontSize: 13, color: theme.sub, marginTop: 4, marginBottom: 26 }}>

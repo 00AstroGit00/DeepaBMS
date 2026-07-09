@@ -48,6 +48,37 @@ services:
     networks:
       - bms-net
 
+  # 4. Cloudflare Tunnel (Enables secure sync from any network/internet without port forwarding)
+  # OPTION A: Persistent Tunnel (Recommended for production, requires a Cloudflare Account & token)
+  # To use: create a tunnel in Cloudflare Dashboard, get the token, and add it to your .env file
+  tunnel-prod:
+    image: cloudflare/cloudflared:latest
+    container_name: deepa-bms-tunnel-prod
+    restart: always
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate run
+    depends_on:
+      - backend
+    networks:
+      - bms-net
+    profiles:
+      - production
+
+  # OPTION B: Quick Tunnel (Recommended for instant zero-config testing)
+  # To use: run `docker compose --profile demo up` and check the logs for the temporary public HTTPS URL
+  tunnel-demo:
+    image: cloudflare/cloudflared:latest
+    container_name: deepa-bms-tunnel-demo
+    restart: always
+    command: tunnel --no-autoupdate --url http://backend:3000
+    depends_on:
+      - backend
+    networks:
+      - bms-net
+    profiles:
+      - demo
+
 volumes:
   pgdata:
 

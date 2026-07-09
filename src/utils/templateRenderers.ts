@@ -190,20 +190,25 @@ export const renderExcel = (report: PrintableReport, settings: GeneralSettings):
     .map(
       ([key, val]) => `
     <tr>
-      <td class="sumk">${escapeHtml(key)}</td>
+      <td class="sumk" colspan="${Math.max(1, maxCols - 1)}">${escapeHtml(key)}</td>
       <td class="r">${escapeHtml(val)}</td>
     </tr>`
     )
     .join('');
 
-  const notesHtml = report.notes
-    .map(
-      (note, idx) => `
-    <tr>
-      <td class="sub" colspan="${maxCols}">Note ${idx + 1}: ${escapeHtml(note)}</td>
-    </tr>`
-    )
-    .join('');
+  const notesHtml = report.notes.length
+    ? `
+    <tr><td colspan="${maxCols}"></td></tr>
+    <tr><td class="notes-hdr" colspan="${maxCols}">Notes:</td></tr>
+    ${report.notes
+      .map(
+        (note, idx) => `
+      <tr>
+        <td class="sub" colspan="${maxCols}">${idx + 1}. ${escapeHtml(note)}</td>
+      </tr>`
+      )
+      .join('')}`
+    : '';
 
   return `<html xmlns:x="urn:schemas-microsoft-com:office:excel">
 <head>
@@ -217,6 +222,7 @@ export const renderExcel = (report: PrintableReport, settings: GeneralSettings):
     .tot td, tr.tot td { font-weight: bold; background: #FAF5F4; border-top: 1.5pt solid #333 }
     .r { text-align: right }
     .sumk { background: #FAF5F4; font-weight: bold }
+    .notes-hdr { font-weight: bold; color: #333; border: none; font-size: 11px }
   </style>
 </head>
 <body>
@@ -226,9 +232,8 @@ export const renderExcel = (report: PrintableReport, settings: GeneralSettings):
     <tr><td class="sub" colspan="${maxCols}">${escapeHtml(report.title)} · ${escapeHtml(report.period)} · Report No ${escapeHtml(report.code)} · Generated ${timestamp}</td></tr>
     <tr><td colspan="${maxCols}"></td></tr>
     ${sectionsHtml}
-    <tr><td class="sec" colspan="2">EXECUTIVE SUMMARY</td></tr>
+    <tr><td class="sec" colspan="${maxCols}">EXECUTIVE SUMMARY</td></tr>
     ${summaryHtml}
-    <tr><td colspan="${maxCols}"></td></tr>
     ${notesHtml}
   </table>
 </body>
@@ -267,6 +272,14 @@ export const renderCSV = (report: PrintableReport, settings: GeneralSettings): s
 
   parts.push(toCSV(['## EXECUTIVE SUMMARY'], []));
   parts.push(toCSV(['Item', 'Value'], report.summary));
+
+  if (report.notes && report.notes.length > 0) {
+    parts.push('');
+    parts.push(toCSV(['## NOTES'], []));
+    report.notes.forEach((note, idx) => {
+      parts.push(toCSV([`Note ${idx + 1}`, note], []));
+    });
+  }
 
   return parts.join('\n');
 };

@@ -102,7 +102,7 @@ export const renderPDF = (report: PrintableReport, settings: GeneralSettings): s
     .report-title-block { text-align: center; margin: 12px 0 6px; border-top: 1px solid #888; border-bottom: 1px solid #888; padding: 6px 0; }
     .report-title { font-size: 13pt; font-weight: bold; letter-spacing: 1.5px; text-transform: uppercase; font-family: Arial, sans-serif; color: #1a1a1a; }
     .report-period { font-size: 9pt; color: #555; margin-top: 2px; font-family: Arial, sans-serif; }
-    .sec-heading { font-family: Arial, sans-serif; font-size: 9.5pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.6px; padding: 5px 8px; background: #1a1a1a; color: #fff; margin-top: 14px; }
+    .sec-heading { font-family: Arial, sans-serif; font-size: 9.5pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.6px; padding: 5px 8px; background: #1a1a1a; color: #fff; margin-top: 14px; page-break-after: avoid; break-after: avoid; }
     .section-gap { height: 18px; }
     .data-table { width: 100%; border-collapse: collapse; font-size: 9.5pt; page-break-inside: auto; }
     .data-table thead tr { background: #333; color: #fff; }
@@ -243,7 +243,7 @@ export const renderExcel = (report: PrintableReport, settings: GeneralSettings):
     .spacer { border: none; height: 6px; }
     .section-head { background: #1a1a1a; color: #fff; font-weight: bold; font-size: 9.5pt; text-transform: uppercase; letter-spacing: 0.5px; padding: 5px 8px; border: 1px solid #333; }
     th { background: #333; color: #fff; font-weight: bold; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.3px; text-align: left; }
-    .num { text-align: right; font-family: 'Courier New', Courier, monospace; mso-number-format:"\\#\\,\\#\\#0\\.00"; }
+    .num { text-align: right; font-family: 'Courier New', Courier, monospace; mso-number-format:"\[\>\=10000000\]\#\#\\,\#\#\\,\#\#\\,\#\#0\.00\;\[\>\=100000\]\#\#\\,\#\#\\,\#\#0\.00\;\#\#\,\#\#0\.00"; }
     .alt { background: #f5f5f5; }
     .nil-cell { text-align: center; color: #888; font-style: italic; }
     .totals td { font-weight: bold; background: #e0e0e0; border-top: 2pt solid #111 !important; border-bottom: 2.5pt double #111 !important; font-size: 10.5pt; }

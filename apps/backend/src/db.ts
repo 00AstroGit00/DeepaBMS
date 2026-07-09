@@ -2,7 +2,13 @@ import sqlite3 from 'sqlite3';
 import path from 'path';
 import fs from 'fs';
 
-const DB_FILE = path.join(__dirname, '..', 'deepa-bms.db');
+const DB_FILE = process.env.SQLITE_DB_PATH || path.join(__dirname, '..', 'deepa-bms.db');
+
+// Ensure parent directory exists (critical for custom folder volumes)
+const dbDir = path.dirname(DB_FILE);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
 
 export const db = new sqlite3.Database(DB_FILE, (err) => {
   if (err) {

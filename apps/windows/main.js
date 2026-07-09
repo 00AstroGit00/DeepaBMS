@@ -19,7 +19,7 @@ function createWindow() {
   });
 
   // Load the web export output
-  const webIndexPath = path.join(__dirname, '..', 'web', 'dist', 'index.html');
+  const webIndexPath = path.join(__dirname, 'web', 'index.html');
   mainWindow.loadFile(webIndexPath).catch(() => {
     // If not packaged, load the local webpack development server
     mainWindow.loadURL('http://localhost:19006');

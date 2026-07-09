@@ -20,6 +20,12 @@ jobs:
           node-version: 20
           cache: 'npm'
 
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
       - name: Install dependencies
         run: npm ci
 
@@ -59,7 +65,7 @@ jobs:
       - name: Build Web Bundle
         run: |
           npm ci
-          npx expo export -p web
+          npx expo export -p web --output-dir apps/windows/web
 
       - name: Install Windows App dependencies
         working-directory: apps/windows

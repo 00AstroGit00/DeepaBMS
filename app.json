@@ -5,17 +5,21 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "icon": "./assets/favicon.png",
+    "icon": "./assets/icon.png",
     "splash": {
-      "image": "./assets/favicon.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#583828"
     },
     "ios": {
       "supportsTablet": true
     },
     "android": {
-      "package": "com.deepabms.app"
+      "package": "com.deepabms.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-foreground.png",
+        "backgroundColor": "#583828"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"

@@ -1,0 +1,18 @@
+apps/backend/src/db.ts(1,21): error TS2307: Cannot find module 'sqlite3' or its corresponding type declarations.
+apps/backend/src/db.ts(7,50): error TS7006: Parameter 'err' implicitly has an 'any' type.
+apps/backend/src/db.ts(23,21): error TS7006: Parameter 'execErr' implicitly has an 'any' type.
+apps/backend/src/db.ts(36,26): error TS7006: Parameter 'err' implicitly has an 'any' type.
+apps/backend/src/db.ts(36,31): error TS7006: Parameter 'rows' implicitly has an 'any' type.
+apps/backend/src/db.ts(45,35): error TS7006: Parameter 'err' implicitly has an 'any' type.
+apps/backend/src/db.ts(47,25): error TS2683: 'this' implicitly has type 'any' because it does not have a type annotation.
+apps/backend/src/db.ts(47,47): error TS2683: 'this' implicitly has type 'any' because it does not have a type annotation.
+apps/backend/src/index.ts(1,58): error TS2307: Cannot find module 'express' or its corresponding type declarations.
+apps/backend/src/index.ts(2,18): error TS2307: Cannot find module 'cors' or its corresponding type declarations.
+apps/backend/src/index.ts(3,17): error TS2307: Cannot find module 'jsonwebtoken' or its corresponding type declarations.
+apps/backend/src/index.ts(4,20): error TS2307: Cannot find module 'bcrypt' or its corresponding type declarations.
+apps/backend/src/index.ts(5,20): error TS2307: Cannot find module 'morgan' or its corresponding type declarations.
+apps/backend/src/index.ts(6,23): error TS2307: Cannot find module 'express-rate-limit' or its corresponding type declarations.
+apps/backend/src/index.ts(39,26): error TS2339: Property 'headers' does not exist on type 'AuthenticatedRequest'.
+apps/backend/src/index.ts(44,34): error TS7006: Parameter 'err' implicitly has an 'any' type.
+apps/backend/src/index.ts(44,39): error TS7006: Parameter 'decoded' implicitly has an 'any' type.
+apps/backend/src/index.ts(81,96): error TS2339: Property 'body' does not exist on type 'AuthenticatedRequest'.

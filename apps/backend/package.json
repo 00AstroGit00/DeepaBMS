@@ -1,0 +1,31 @@
+{
+  "name": "deepa-bms-backend",
+  "version": "1.0.0",
+  "description": "Production REST API backend for Deepa BMS",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "jsonwebtoken": "^9.0.2",
+    "sqlite3": "^5.1.7",
+    "dotenv": "^16.4.5",
+    "express-rate-limit": "^7.2.0",
+    "morgan": "^1.10.0",
+    "bcryptjs": "^2.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.12.7",
+    "@types/morgan": "^1.9.9",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}

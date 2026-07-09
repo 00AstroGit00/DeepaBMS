@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # 1. Relational database storage (PostgreSQL)
+  postgres:
+    image: postgres:15-alpine
+    container_name: deepa-bms-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: deepa_bms
+      POSTGRES_USER: deepa_admin
+      POSTGRES_PASSWORD: secret_db_password_101
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - bms-net
+
+  # 2. Express API Backend
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    container_name: deepa-bms-backend
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      JWT_SECRET: deepa-bms-secret-key-101
+      DATABASE_URL: postgres://deepa_admin:secret_db_password_101@postgres:5432/deepa_bms
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    networks:
+      - bms-net
+
+  # 3. Static Nginx Web Router (Web Client app delivery)
+  web:
+    image: nginx:stable-alpine
+    container_name: deepa-bms-web-client
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./apps/web/dist:/usr/share/nginx/html
+    networks:
+      - bms-net
+
+volumes:
+  pgdata:
+
+networks:
+  bms-net:
+    driver: bridge

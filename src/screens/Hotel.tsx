@@ -224,6 +224,10 @@ export default function Hotel({ navigation }: { navigation: any }) {
           numColumns={2}
           columnWrapperStyle={{ gap: 10, paddingHorizontal: 16 }}
           contentContainerStyle={{ paddingBottom: 32, gap: 10 }}
+          removeClippedSubviews
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={4}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={{ flex: 1 }}
@@ -273,6 +277,10 @@ export default function Hotel({ navigation }: { navigation: any }) {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
           ListEmptyComponent={<EmptyState icon="people-outline" text="No past stays yet" />}
+          removeClippedSubviews
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
           renderItem={({ item }) => (
             <Card style={{ marginBottom: 8, padding: 13 }}>
               <Row style={{ justifyContent: 'space-between' }}>

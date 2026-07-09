@@ -117,7 +117,7 @@ export default function Reports() {
 
   // ── GST summary for selected month ────────────────────────────────────────
   const gstSummary = useMemo(() => {
-    let outFood = 0, outRooms = 0, taxFood = 0, taxRooms = 0, liquor = 0;
+    let outFood = 0, outRooms = 0, taxFood = 0, taxRooms = 0, liquor = 0, barSales = 0;
     state.sales.forEach((s: any) => {
       if (keyOf(s.date).startsWith(selectedMonth)) {
         if (s.dept === 'rooms') {
@@ -126,12 +126,13 @@ export default function Reports() {
           outFood += s.gstAmount; taxFood += s.amount;
         } else {
           liquor += s.total;
+          if (s.dept === 'bar') barSales += s.total;
         }
       }
     });
     return {
-      outFood, outRooms, taxFood, taxRooms, liquor,
-      tot: Math.round(0.1 * liquor),
+      outFood, outRooms, taxFood, taxRooms, liquor, barSales,
+      tot: Math.round(0.1 * barSales),
       total: outFood + outRooms
     };
   }, [state.sales, selectedMonth]);
@@ -601,7 +602,7 @@ export default function Reports() {
 
                 <Row2
                   label="Liquor sales (FL-3) — outside GST"
-                  value={inr(gstSummary.liquor)}
+                  value={inr(gstSummary.barSales)}
                   indent color={theme.amber}
                 />
                 <Row2

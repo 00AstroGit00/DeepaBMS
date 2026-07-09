@@ -180,6 +180,10 @@ export default function Credits({ navigation }: { navigation: any }) {
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
         ListEmptyComponent={<EmptyState icon="people-outline" text={`No ${activeTab} accounts yet`} />}
+        removeClippedSubviews
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={5}
         renderItem={({ item }) => (
           <TouchableOpacity
             onPress={() => {

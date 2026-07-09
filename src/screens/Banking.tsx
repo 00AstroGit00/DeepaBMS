@@ -559,6 +559,10 @@ export default function Banking({ navigation }: { navigation: any }) {
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
             ListEmptyComponent={<EmptyState icon="swap-horizontal-outline" text="No bank movements in this period" />}
+            removeClippedSubviews
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
             renderItem={({ item }) => (
               <Card
                 style={{
@@ -1028,6 +1032,10 @@ export default function Banking({ navigation }: { navigation: any }) {
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
             ListEmptyComponent={<EmptyState icon="swap-horizontal-outline" text="No matching transactions" />}
+            removeClippedSubviews
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
             renderItem={({ item }) => (
               <Card style={{ marginBottom: 7, padding: 12 }}>
                 <Row style={{ justifyContent: 'space-between', marginBottom: 4 }}>

@@ -5,6 +5,7 @@ import { StoreProvider } from './src/context/StoreContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import Login from './src/Login';
 import Layout from './src/Layout';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 
 function MainApp() {
   const { currentUser } = useAuth();
@@ -22,7 +23,9 @@ export default function App() {
       <StoreProvider>
         <AuthProvider>
           <StatusBar style="auto" />
-          <MainApp />
+          <ErrorBoundary>
+            <MainApp />
+          </ErrorBoundary>
         </AuthProvider>
       </StoreProvider>
     </ThemeProvider>

@@ -272,6 +272,10 @@ export default function Users() {
           data={state.users}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
+          removeClippedSubviews
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
           renderItem={({ item }) => {
             const roleInfo = ROLE_INFO[item.role];
             return (
@@ -349,6 +353,10 @@ export default function Users() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
           ListEmptyComponent={<EmptyState icon="shield-outline" text="No audit events yet" />}
+          removeClippedSubviews
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
           renderItem={({ item }) => {
             const isFailed = item.action.startsWith('LOGIN FAILED');
             const isLogin = item.action === 'LOGIN';

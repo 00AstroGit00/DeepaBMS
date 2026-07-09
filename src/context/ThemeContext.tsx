@@ -47,7 +47,7 @@ export const lightTheme: ThemeColors = {
   purple: '#6B4BA3',
   purpleSoft: '#EFE9F8',
   teal: '#0E7A74',
-  tealSoft: '#E0F2F1'
+  tealSoft: '#E0F2F1',
 };
 
 export const darkTheme: ThemeColors = {
@@ -72,7 +72,7 @@ export const darkTheme: ThemeColors = {
   purple: '#A98BE0',
   purpleSoft: '#2C2438',
   teal: '#4EC2BA',
-  tealSoft: '#1B3230'
+  tealSoft: '#1B3230',
 };
 
 export interface ThemeContextType {
@@ -80,12 +80,14 @@ export interface ThemeContextType {
   toggle: () => void;
 }
 
-const ThemeContext = createContext<ThemeContextType>({
+export const ThemeContext = createContext<ThemeContextType>({
   theme: lightTheme,
-  toggle: () => {}
+  toggle: () => {},
 });
 
-export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const [isDark, setIsDark] = useState(false);
   const toggle = () => setIsDark((d) => !d);
   const theme = isDark ? darkTheme : lightTheme;

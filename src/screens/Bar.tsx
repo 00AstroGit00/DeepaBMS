@@ -393,6 +393,10 @@ export default function Bar({ navigation }: { navigation: any }) {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
           ListEmptyComponent={<EmptyState icon="wine-outline" text="No brands registered yet" />}
+          removeClippedSubviews
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
           renderItem={({ item }) => {
             const isLowStock = item.fullBottles <= 8;
             return (
@@ -465,6 +469,10 @@ export default function Bar({ navigation }: { navigation: any }) {
               text="No stock audits yet. Tap a brand → Audit to record physical stock."
             />
           }
+          removeClippedSubviews
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
           renderItem={({ item }) => (
             <Card style={{ marginBottom: 8, padding: 13 }}>
               <Row style={{ justifyContent: 'space-between' }}>

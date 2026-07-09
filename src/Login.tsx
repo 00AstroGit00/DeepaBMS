@@ -14,6 +14,7 @@ import { useStore } from './context/StoreContext';
 import { useAuth, User, ROLE_INFO } from './context/AuthContext';
 import { useLayout } from './utils/useLayout';
 import { uid } from './utils/helpers';
+import { constantTimeEqual } from './utils/security';
 
 const ROLE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   owner: 'key',
@@ -52,7 +53,7 @@ export default function Login() {
     setIsError(false);
 
     if (newPin.length === 4) {
-      if (newPin === selectedUser.pin) {
+      if (constantTimeEqual(newPin, selectedUser.pin)) {
         dispatch({
           type: 'AUDIT',
           event: {
@@ -148,6 +149,7 @@ export default function Login() {
               <TouchableOpacity
                 key={idx}
                 onPress={() => handleKeyPress(key)}
+                accessibilityLabel={key === 'del' ? 'Delete' : `Digit ${key}`}
                 style={{
                   width: 74,
                   height: 74,

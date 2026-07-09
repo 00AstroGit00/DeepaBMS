@@ -99,7 +99,7 @@ export default function DayBook({ navigation }: { navigation: any }) {
             id: s.id,
             date: s.date,
             title: s.description,
-            sub: `${s.dept.toUpperCase()}${s.billNo ? ' · ' + s.billNo : ''}${s.gstAmount ? ' · GST ' + inr(s.gstAmount) : ''}`,
+            sub: `${(s.dept || '').toUpperCase()}${s.billNo ? ' · ' + s.billNo : ''}${s.gstAmount ? ' · GST ' + inr(s.gstAmount) : ''}`,
             amount: s.total,
             positive: true,
             icon: 'receipt-outline',
@@ -370,6 +370,10 @@ export default function DayBook({ navigation }: { navigation: any }) {
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
         ListEmptyComponent={<EmptyState icon="book-outline" text="No entries for this day" />}
+        removeClippedSubviews
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={5}
         renderItem={({ item }) => (
           <TouchableOpacity
             activeOpacity={0.7}

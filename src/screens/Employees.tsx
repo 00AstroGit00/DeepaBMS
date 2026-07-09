@@ -574,6 +574,10 @@ export default function Employees({ navigation }: { navigation: any }) {
             data={activeEmployees}
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
+            removeClippedSubviews
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
             renderItem={({ item }) => {
               const status = item.attendance[attDateKey];
               const styles = getAttendanceBadgeStyle(status);
@@ -662,6 +666,10 @@ export default function Employees({ navigation }: { navigation: any }) {
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
             ListEmptyComponent={<EmptyState icon="calendar-outline" text="No leave records" />}
+            removeClippedSubviews
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
             renderItem={({ item }) => {
               const statusColor = item.status === 'approved' ? theme.green : item.status === 'rejected' ? theme.red : theme.amber;
               const statusBg = item.status === 'approved' ? theme.greenSoft : item.status === 'rejected' ? theme.redSoft : theme.amberSoft;
@@ -740,6 +748,10 @@ export default function Employees({ navigation }: { navigation: any }) {
             data={filteredEmployees}
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
+            removeClippedSubviews
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
             renderItem={({ item }) => (
               <TouchableOpacity
                 onPress={() => {

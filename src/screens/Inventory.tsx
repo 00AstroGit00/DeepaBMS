@@ -215,6 +215,10 @@ export default function Inventory({ navigation }: { navigation: any }) {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
           ListEmptyComponent={<EmptyState icon="cube-outline" text="No items in this category" />}
+          removeClippedSubviews
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
           renderItem={({ item }) => {
             const isLow = item.stock <= item.reorder;
             return (
@@ -278,6 +282,10 @@ export default function Inventory({ navigation }: { navigation: any }) {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
           ListEmptyComponent={<EmptyState icon="swap-vertical-outline" text="No stock movements yet" />}
+          removeClippedSubviews
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
           renderItem={({ item }) => {
             const badgeColor = item.kind === 'in' ? theme.green : item.kind === 'wastage' ? theme.red : theme.amber;
             const badgeBg = item.kind === 'in' ? theme.greenSoft : item.kind === 'wastage' ? theme.redSoft : theme.amberSoft;

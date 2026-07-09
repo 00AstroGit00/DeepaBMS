@@ -233,6 +233,10 @@ export default function Sales({ navigation }: { navigation: any }) {
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
         ListEmptyComponent={<EmptyState icon="receipt-outline" text="No sales in this period" />}
+        removeClippedSubviews
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={5}
         renderItem={({ item }) => (
           <Card
             style={{

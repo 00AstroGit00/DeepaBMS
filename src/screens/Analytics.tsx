@@ -19,7 +19,7 @@ export default function Analytics() {
 
   const categorySplits = [
     { label: 'Hotel & Rooms', value: 450000, color: theme.primary },
-    { label: 'F&B Kitchen', value: 320000, color: theme.orange },
+    { label: 'F&B Kitchen', value: 320000, color: theme.amber },
     { label: 'Bar', value: 215000, color: theme.red },
   ];
 

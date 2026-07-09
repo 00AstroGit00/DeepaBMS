@@ -38,6 +38,31 @@ export interface BankMove {
   note: string;
 }
 
+export interface BankStatementRow {
+  id: string;
+  date: string;
+  description: string;
+  refNo: string;
+  debit: number;
+  credit: number;
+  balance: number;
+}
+
+export interface BankStatement {
+  id: string;
+  importedAt: string;
+  bankId: string;
+  bankGuess: string;
+  fileName: string;
+  fromDate: string;
+  toDate: string;
+  totalCredit: number;
+  totalDebit: number;
+  openingBalance: number;
+  closingBalance: number;
+  rows: BankStatementRow[];
+}
+
 export interface Guest {
   name: string;
   phone: string;
@@ -227,6 +252,7 @@ export interface GlobalState {
   sales: Sale[];
   txns: Txn[];
   bankMoves: BankMove[];
+  bankStatements: BankStatement[];
   rooms: Room[];
   stays: Stay[];
   inventory: InvItem[];
@@ -247,6 +273,8 @@ export type Action =
   | { type: 'ADD_TXN'; txn: Txn }
   | { type: 'PAY_SALARIES'; txn: Txn }
   | { type: 'ADD_BANK_MOVE'; move: BankMove }
+  | { type: 'ADD_BANK_STATEMENT'; statement: BankStatement }
+  | { type: 'REMOVE_BANK_STATEMENT'; statementId: string }
   | { type: 'CHECK_IN'; roomId: string; guest: Guest }
   | { type: 'CHECK_OUT'; roomId: string; stay: Stay; sale: Sale }
   | { type: 'SET_ROOM_STATUS'; roomId: string; status: 'occupied' | 'vacant' | 'cleaning' }
@@ -540,6 +568,7 @@ export const buildSeed = (): GlobalState => {
       { id: uid(), date: makeIsoDate(3, 16), kind: 'deposit', amount: 30000, bankId: defaultBankId, note: 'Cash deposit' },
       { id: uid(), date: makeIsoDate(12, 11), kind: 'withdraw', bankId: 'bank-sbi', amount: 10000, note: 'Petty cash withdrawal' }
     ],
+    bankStatements: [],
     rooms: [
       {
         id: 'r101',
@@ -802,6 +831,18 @@ export function reducer(state: GlobalState, action: Action): GlobalState {
       return {
         ...state,
         bankMoves: [action.move, ...state.bankMoves]
+      };
+
+    case 'ADD_BANK_STATEMENT':
+      return {
+        ...state,
+        bankStatements: [action.statement, ...(state.bankStatements || [])]
+      };
+
+    case 'REMOVE_BANK_STATEMENT':
+      return {
+        ...state,
+        bankStatements: (state.bankStatements || []).filter((s) => s.id !== action.statementId)
       };
 
     case 'CHECK_IN':
@@ -1341,6 +1382,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           parsed.liquorAudits = parsed.liquorAudits || freshSeed.liquorAudits;
           parsed.credits = parsed.credits || freshSeed.credits;
           parsed.bankMoves = parsed.bankMoves || freshSeed.bankMoves;
+          parsed.bankStatements = parsed.bankStatements || [];
           parsed.sales = parsed.sales || freshSeed.sales;
           parsed.txns = parsed.txns || freshSeed.txns;
           parsed.settings = parsed.settings || freshSeed.settings;

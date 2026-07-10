@@ -7,9 +7,9 @@
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
     "splash": {
-      "image": "./assets/icon.png",
+      "image": "./assets/adaptive-background.png",
       "resizeMode": "contain",
-      "backgroundColor": "#583828"
+      "backgroundColor": "#8B2E2E"
     },
     "ios": {
       "supportsTablet": true
@@ -18,7 +18,7 @@
       "package": "com.deepabms.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-foreground.png",
-        "backgroundColor": "#583828"
+        "backgroundColor": "#8B2E2E"
       }
     },
     "web": {

@@ -219,6 +219,7 @@ export default function Hotel({ navigation }: { navigation: any }) {
       {/* Tab Panels */}
       {activeTab === 'rooms' ? (
         <FlatList
+          key="rooms"
           data={state.rooms}
           keyExtractor={(item) => item.id}
           numColumns={2}
@@ -273,6 +274,7 @@ export default function Hotel({ navigation }: { navigation: any }) {
         />
       ) : (
         <FlatList
+          key="register"
           data={state.stays ?? []}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}

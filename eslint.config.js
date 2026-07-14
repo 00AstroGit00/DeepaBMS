@@ -1,6 +1,6 @@
 module.exports = [
   {
-    ignores: ["node_modules/", "dist/", "android/", "ios/", ".expo/"]
+    ignores: ["**/node_modules/**", "**/dist/**", "android/", "ios/", ".expo/"]
   },
   ...require('eslint-config-expo/flat'),
   {

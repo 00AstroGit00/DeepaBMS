@@ -1,0 +1,14 @@
+* @deepa-bms/owner
+
+# Security-sensitive paths require owner review
+/.github/                  @deepa-bms/owner
+/.github/workflows/        @deepa-bms/owner
+/scripts/ci/               @deepa-bms/owner
+/security/                 @deepa-bms/owner
+*.secret                   @deepa-bms/owner
+
+# Application source reviewed by the team
+/src/                      @deepa-bms/team
+/apps/backend/             @deepa-bms/team
+/apps/windows/             @deepa-bms/team
+/docker/                   @deepa-bms/team

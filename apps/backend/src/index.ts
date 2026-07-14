@@ -1,306 +1,215 @@
+import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
-import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
-import { initializeDatabase, query, run } from './db';
-import fs from 'fs';
-import path from 'path';
+import { initializeDatabase, db } from './db';
+import {
+  securityHeaders,
+  httpsRedirect,
+  CORS_OPTIONS,
+  TRUST_PROXY,
+} from './middleware/security';
 import { spawn } from 'child_process';
+import { tenantMiddleware } from './middleware/tenant';
+
+import authRoutes from './domains/auth/auth.routes';
+import salesRoutes from './domains/sales/sales.routes';
+import roomsRoutes from './domains/rooms/rooms.routes';
+import inventoryRoutes from './domains/inventory/inventory.routes';
+import purchasingRoutes from './domains/purchasing/purchasing.routes';
+import restaurantRoutes from './domains/restaurant/restaurant.routes';
+import liquorRoutes from './domains/liquor/liquor.routes';
+import accountingRoutes from './domains/accounting/accounting.routes';
+import analyticsRoutes from './domains/analytics/analytics.routes';
+import employeesRoutes from './domains/employees/employees.routes';
+import syncRoutes from './domains/sync/sync.routes';
+import auditRoutes from './domains/audit/audit.routes';
+import hrRoutes from './domains/hr/hr.routes';
+import workflowRoutes from './domains/workflow/workflow.routes';
+import platformRoutes from './domains/platform/platform.routes';
+import aiRoutes from './domains/ai/ai.routes';
+
+import { bootstrap } from './bootstrap';
+import { trackRequestMetrics, flushMetrics } from './middleware/monitoring';
+import { flushCountersToDb } from './middleware/metrics';
+import {
+  startWorkflowScheduler,
+  stopWorkflowScheduler,
+} from './domains/workflow/workflow.service';
 
 const app = express();
+
+const REQUIRED_ENV_VARS = ['JWT_SECRET'] as const;
+const validateConfig = (): void => {
+  const missing: string[] = [];
+  for (const v of REQUIRED_ENV_VARS) {
+    if (!process.env[v]) missing.push(v);
+  }
+  if (missing.length > 0) {
+    console.error('FATAL: Missing required environment variables:');
+    missing.forEach((v) => console.error(`  - ${v}`));
+    console.error('\nCopy .env.example to .env and fill in the values:');
+    console.error('  cp .env.example .env');
+    process.exit(1);
+  }
+};
+
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'deepa-bms-secret-key-101';
+const JWT_SECRET: string = process.env.JWT_SECRET!;
 
-// Increase body limit to 5mb — /api/sync sends the full app state JSON (~200-500KB)
-app.use(cors());
+if (JWT_SECRET.length < 32) {
+  console.warn(
+    'WARNING: JWT_SECRET is too short (< 32 chars). Generate a strong secret for production.',
+  );
+}
+
+let reqIdCounter = 0;
+function requestId(req: Request, _res: Response, next: NextFunction): void {
+  (req as any).requestId =
+    `${Date.now().toString(36)}-${(reqIdCounter++).toString(36)}`;
+  next();
+}
+
+function structuredLog(
+  level: string,
+  req: Request,
+  message: string,
+  extra?: Record<string, unknown>,
+): void {
+  const entry: Record<string, unknown> = {
+    timestamp: new Date().toISOString(),
+    level,
+    requestId: (req as any).requestId || '-',
+    method: req.method,
+    path: req.path,
+    message,
+    ...extra,
+  };
+  if (level === 'error') {
+    console.error(JSON.stringify(entry));
+  } else {
+    console.log(JSON.stringify(entry));
+  }
+}
+
+function requestLogger(req: Request, res: Response, next: NextFunction): void {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const safeExtra: Record<string, unknown> = {
+      status: res.statusCode,
+      duration,
+    };
+    if ((req as any).user) {
+      safeExtra.userId = (req as any).user!.id;
+      safeExtra.role = (req as any).user!.role;
+    }
+    structuredLog(
+      'info',
+      req,
+      `${req.method} ${req.path} ${res.statusCode} ${duration}ms`,
+      safeExtra,
+    );
+  });
+  next();
+}
+
+app.set('trust proxy', TRUST_PROXY);
+
+app.use(requestId);
+app.use(securityHeaders);
+app.use(httpsRedirect);
+app.use(cors(CORS_OPTIONS));
 app.use(express.json({ limit: '5mb' }));
-app.use(morgan('combined'));
+app.use(requestLogger);
+app.use(trackRequestMetrics);
+app.use(tenantMiddleware);
 
-// General API rate limiter (sync polls every 30s, so ~30 req/15min per device, 500 is safe for up to ~16 concurrent devices)
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 500,
-  message: 'Too many requests from this IP, please try again after 15 minutes.'
+  message: 'Too many requests from this IP, please try again after 15 minutes.',
 });
 app.use('/api/', apiLimiter);
 
-// Stricter limiter for auth endpoint — prevents PIN brute-force
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
-  message: 'Too many login attempts, please try again after 15 minutes.'
+  message: 'Too many login attempts, please try again after 15 minutes.',
 });
 app.use('/api/auth/', authLimiter);
 
-// User auth payload structure
-interface AuthUser {
-  id: string;
-  name: string;
-  role: string;
-}
+const syncLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  message: 'Too many sync requests, please try again later.',
+});
+app.use('/api/sync', syncLimiter);
 
-// Extend express Request interface
-interface AuthenticatedRequest extends Request {
-  user?: AuthUser;
-}
+app.get('/health/live', (_req: Request, res: Response) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
-// Authentication middleware
-const authenticateToken = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) return res.status(401).json({ message: 'Authorization token required' });
-
-  jwt.verify(token, JWT_SECRET, (err, decoded) => {
-    if (err) return res.status(403).json({ message: 'Invalid or expired session token' });
-    req.user = decoded as AuthUser;
-    next();
-  });
-};
-
-// Route: Lockscreen authenticate
-app.post('/api/auth/login', async (req: Request, res: Response) => {
-  const { pin } = req.body;
-  if (!pin) return res.status(400).json({ message: 'Security PIN is required' });
-
-  try {
-    const users = await query('SELECT * FROM users WHERE pin_hash = ? AND active = 1', [pin]); // Simple comparison for demo PIN locks
-    if (users.length === 0) {
-      return res.status(401).json({ message: 'Invalid lockscreen security PIN' });
+app.get('/health', (_req: Request, res: Response) => {
+  db.get('SELECT 1 AS ok', [], (err) => {
+    if (err) {
+      res
+        .status(503)
+        .json({ status: 'error', message: 'Database unavailable' });
+      return;
     }
-    const user = users[0];
-    const token = jwt.sign({ id: user.id, name: user.name, role: user.role }, JWT_SECRET, { expiresIn: '8h' });
-
-    res.json({ token, user: { id: user.id, name: user.name, role: user.role } });
-  } catch (err: any) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// Route: Sales register
-app.get('/api/sales', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const rows = await query('SELECT * FROM sales ORDER BY date DESC');
-    res.json(rows);
-  } catch (err: any) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-app.post('/api/sales', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  const { id, date, dept, description, amount, gstRate, gstAmount, total, mode, billNo } = req.body;
-  try {
-    await run(
-      'INSERT INTO sales (id, date, dept, description, amount, gst_rate, gst_amount, total, mode, bill_no, operator_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, date, dept, description, amount, gstRate, gstAmount, total, mode, billNo, req.user?.id]
-    );
-    res.status(201).json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// Route: Hotel rooms
-app.get('/api/rooms', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const rows = await query('SELECT * FROM rooms');
-    res.json(rows);
-  } catch (err: any) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// Route: F&B Kitchen Inventory
-app.get('/api/inventory', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const rows = await query('SELECT * FROM inventory');
-    res.json(rows);
-  } catch (err: any) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// Route: Bar Liquor stock
-app.get('/api/liquor', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const rows = await query('SELECT * FROM liquor');
-    res.json(rows);
-  } catch (err: any) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// Route: Employees
-app.get('/api/employees', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const rows = await query('SELECT * FROM employees');
-    res.json(rows);
-  } catch (err: any) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// Route: Centralized State Sync (LWW & Union based merging)
-const STATE_FILE = path.join(__dirname, '..', 'deepa-bms-master-state.json');
-const STATE_FILE_BAK = STATE_FILE + '.bak';
-
-// ── Simple in-memory Promise-queue mutex ────────────────────────────────────
-// Ensures concurrent /api/sync requests are serialized (read-modify-write safety)
-let syncQueueTail: Promise<void> = Promise.resolve();
-function withSyncLock<T>(fn: () => Promise<T>): Promise<T> {
-  const result = syncQueueTail.then(fn);
-  // Keep tail alive but swallow errors (each caller handles their own)
-  syncQueueTail = result.then(() => {}, () => {});
-  return result;
-}
-
-// ── Async file helpers ──────────────────────────────────────────────────────
-async function readMasterState(): Promise<any> {
-  try {
-    const data = await fs.promises.readFile(STATE_FILE, 'utf8');
-    return JSON.parse(data.trim());
-  } catch (err: any) {
-    if (err.code === 'ENOENT') return null; // file doesn't exist yet
-    // JSON parse error — try backup
-    try {
-      const bak = await fs.promises.readFile(STATE_FILE_BAK, 'utf8');
-      console.warn('[sync] Primary state file corrupt, restoring from backup.');
-      await fs.promises.writeFile(STATE_FILE, bak, 'utf8');
-      return JSON.parse(bak.trim());
-    } catch {
-      return null; // No backup either — fresh start
-    }
-  }
-}
-
-async function writeMasterState(state: any): Promise<void> {
-  const json = JSON.stringify(state, null, 2);
-  // Write backup first, then primary (crash-safe ordering)
-  await fs.promises.writeFile(STATE_FILE_BAK, json, 'utf8');
-  await fs.promises.writeFile(STATE_FILE, json, 'utf8');
-}
-
-// ── Merge helpers ───────────────────────────────────────────────────────────
-function mergeCollections(local: any[] = [], remote: any[] = []): any[] {
-  const map = new Map<string, any>();
-  remote.forEach(item => {
-    if (item && item.id) map.set(item.id, item);
-  });
-  local.forEach(item => {
-    if (item && item.id) {
-      const existing = map.get(item.id);
-      if (existing) {
-        const existingDate = existing.date || existing.importedAt || existing.createdAt || '';
-        const localDate = item.date || item.importedAt || item.createdAt || '';
-        if (localDate && existingDate && localDate > existingDate) {
-          map.set(item.id, item);
-        }
-      } else {
-        map.set(item.id, item);
-      }
-    }
-  });
-  return Array.from(map.values());
-}
-
-function mergeRooms(local: any[] = [], remote: any[] = []): any[] {
-  const map = new Map<string, any>();
-  remote.forEach(r => map.set(r.id, r));
-  local.forEach(r => {
-    const existing = map.get(r.id);
-    if (!existing) {
-      map.set(r.id, r);
-    } else {
-      // Favor occupied status or latest checkin info
-      if (r.status === 'occupied' || (existing.status !== 'occupied' && r.status === 'cleaning')) {
-        map.set(r.id, r);
-      }
-    }
-  });
-  return Array.from(map.values());
-}
-
-// ── Sync route ──────────────────────────────────────────────────────────────
-app.post('/api/sync', async (req: Request, res: Response) => {
-  const { state: localState } = req.body;
-  if (!localState) return res.status(400).json({ message: 'Local state is required for sync' });
-
-  try {
-    // Serialize all concurrent sync requests through the queue
-    const mergedState = await withSyncLock(async () => {
-      const masterState = await readMasterState();
-
-      if (!masterState) {
-        // First sync ever: server bootstraps from incoming state
-        const fresh = { ...localState, ready: true };
-        await writeMasterState(fresh);
-        return fresh;
-      }
-
-      // Merge: master is authoritative base; local additions win for new records
-      const merged: any = {
-        ready: true,
-        users: mergeCollections(localState.users, masterState.users),
-        auditLog: mergeCollections(localState.auditLog, masterState.auditLog),
-        sales: mergeCollections(localState.sales, masterState.sales),
-        txns: mergeCollections(localState.txns, masterState.txns),
-        bankMoves: mergeCollections(localState.bankMoves, masterState.bankMoves),
-        bankStatements: mergeCollections(localState.bankStatements, masterState.bankStatements),
-        rooms: mergeRooms(localState.rooms, masterState.rooms),
-        stays: mergeCollections(localState.stays, masterState.stays),
-        inventory: mergeCollections(localState.inventory, masterState.inventory),
-        stockMoves: mergeCollections(localState.stockMoves, masterState.stockMoves),
-        liquor: mergeCollections(localState.liquor, masterState.liquor),
-        liquorAudits: mergeCollections(localState.liquorAudits, masterState.liquorAudits),
-        credits: mergeCollections(localState.credits, masterState.credits),
-        employees: mergeCollections(localState.employees, masterState.employees),
-        leaves: mergeCollections(localState.leaves, masterState.leaves),
-        announcements: mergeCollections(localState.announcements, masterState.announcements),
-        banks: mergeCollections(localState.banks, masterState.banks),
-        // Settings: take local but strip serverUrl/lastSyncedAt (device-specific fields)
-        settings: {
-          ...masterState.settings,
-          ...localState.settings,
-          serverUrl: masterState.settings?.serverUrl || localState.settings?.serverUrl || '',
-          lastSyncedAt: undefined  // Each device tracks its own sync time locally
-        }
-      };
-
-      await writeMasterState(merged);
-      return merged;
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      node: process.version,
+      memory: process.memoryUsage().rss,
     });
-
-    res.json(mergedState);
-  } catch (err: any) {
-    console.error('[sync] Error:', err.message);
-    res.status(500).json({ message: `Sync failed: ${err.message}` });
-  }
+  });
 });
 
-// Seed Initial User database on boot
-const seedUsersTable = async () => {
-  const users = await query('SELECT COUNT(*) as count FROM users');
-  if (users[0].count === 0) {
-    await run("INSERT INTO users (id, name, role, pin_hash) VALUES ('u-owner', 'Deepa (Owner)', 'owner', '1234')");
-    await run("INSERT INTO users (id, name, role, pin_hash) VALUES ('u-manager', 'Rajan (Manager)', 'manager', '2345')");
-    await run("INSERT INTO users (id, name, role, pin_hash) VALUES ('u-cashier', 'Sreeja (Cashier)', 'cashier', '3456')");
-    console.log('Seeded default user accounts.');
-  }
-};
+app.use('/api/auth', authRoutes);
+app.use('/api/sales', salesRoutes);
+app.use('/api/rooms', roomsRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/purchasing', purchasingRoutes);
+app.use('/api/restaurant', restaurantRoutes);
+app.use('/api/liquor', liquorRoutes);
+app.use('/api/accounting', accountingRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/employees', employeesRoutes);
+app.use('/api/sync', syncRoutes);
+app.use('/api/audit', auditRoutes);
+app.use('/api/hr', hrRoutes);
+app.use('/api/workflow', workflowRoutes);
+app.use('/api/platform', platformRoutes);
+app.use('/api/ai', aiRoutes);
 
-// Centralized error handler (must have 4 args for Express to recognize it as error middleware)
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('[API Error]', err.stack || err.message);
-  res.status(err.status || 500).json({ message: err.message || 'Internal server error' });
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+  structuredLog('error', req, err.message || 'Internal server error', {
+    stack: err.stack,
+  });
+  res
+    .status(err.status || 500)
+    .json({ message: err.message || 'Internal server error' });
 });
 
 const startQuickTunnel = (port: number) => {
   console.log('[Tunnel] Starting automated Cloudflare Quick Tunnel...');
-  const child = spawn('npx', ['--yes', '@cloudflare/cloudflared', 'tunnel', '--no-autoupdate', '--url', `http://localhost:${port}`], {
-    shell: true
-  });
+  const child = spawn(
+    'npx',
+    [
+      '--yes',
+      '@cloudflare/cloudflared',
+      'tunnel',
+      '--no-autoupdate',
+      '--url',
+      `http://localhost:${port}`,
+    ],
+    {
+      shell: true,
+    },
+  );
 
   child.stderr.on('data', (data) => {
     const output = data.toString();
@@ -309,7 +218,9 @@ const startQuickTunnel = (port: number) => {
       console.log('\n==================================================');
       console.log('  ⚡ DEEPA BMS IS ACCESSIBLE GLOBALLY! ⚡');
       console.log(`  Public HTTPS URL: \x1b[36m${match[0]}\x1b[0m`);
-      console.log('  Enter this URL in Settings -> serverUrl on Android/Windows');
+      console.log(
+        '  Enter this URL in Settings -> serverUrl on Android/Windows',
+      );
       console.log('==================================================\n');
     }
   });
@@ -319,20 +230,46 @@ const startQuickTunnel = (port: number) => {
   });
 };
 
-// Initialize & Launch API server
-// Bind to 0.0.0.0 so LAN devices (other phones/tablets on same Wi-Fi) can reach the server
-initializeDatabase().then(() => {
-  seedUsersTable().then(() => {
+validateConfig();
+initializeDatabase()
+  .then(() => bootstrap())
+  .then(() => {
     app.listen(Number(PORT), '0.0.0.0', () => {
       console.log(`Deepa BMS API Server listening on http://0.0.0.0:${PORT}`);
       console.log(`LAN devices: connect to http://<this-machine-IP>:${PORT}`);
-      
-      // Auto-start tunnel if flag or env variable is supplied
-      if (process.env.START_TUNNEL === 'true' || process.argv.includes('--tunnel')) {
+
+      // M2-1 + M2-3: periodic maintenance loops.
+      const metricsTimer = setInterval(
+        () => {
+          flushMetrics().catch(() => {});
+          flushCountersToDb().catch(() => {});
+        },
+        Number(process.env.METRICS_FLUSH_INTERVAL || 60000),
+      );
+
+      // M2-3: start the workflow scheduler (executes due jobs).
+      startWorkflowScheduler(Number(process.env.WORKFLOW_POLL_MS || 30000));
+
+      const shutdown = (signal: string) => {
+        console.log(`[shutdown] ${signal} received — draining...`);
+        clearInterval(metricsTimer);
+        stopWorkflowScheduler();
+        process.exit(0);
+      };
+      process.on('SIGTERM', () => shutdown('SIGTERM'));
+      process.on('SIGINT', () => shutdown('SIGINT'));
+
+      if (
+        process.env.START_TUNNEL === 'true' ||
+        process.argv.includes('--tunnel')
+      ) {
         startQuickTunnel(Number(PORT));
       }
     });
+  })
+  .catch((err) => {
+    console.error('FATAL: Server startup failed:', err);
+    process.exit(1);
   });
-}).catch((err) => {
-  console.error('Failed to launch SQLite database migrations:', err);
-});
+
+export { app };

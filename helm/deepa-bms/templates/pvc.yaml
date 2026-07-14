@@ -1,0 +1,19 @@
+{{- if .Values.sqlite.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "deepa-bms.componentName" (dict "root" . "component" "sqlite") }}-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "deepa-bms.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sqlite
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.sqlite.persistence.storageClass }}
+  storageClassName: {{ .Values.sqlite.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.sqlite.persistence.size }}
+{{- end }}

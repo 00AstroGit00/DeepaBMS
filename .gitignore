@@ -5,3 +5,6 @@ android/
 dist/
 web-build/
 apps/windows/web/
+.env
+.env.local
+.env.production

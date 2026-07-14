@@ -1,0 +1,94 @@
+# =============================================================================
+# DeepaBMS — OpenTelemetry Collector Configuration
+# =============================================================================
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  jaeger:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:14250
+      thrift_http:
+        endpoint: 0.0.0.0:14268
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+
+  attributes/cluster:
+    actions:
+      - key: cluster
+        value: deepa-bms-prod
+        action: insert
+      - key: environment
+        value: production
+        action: insert
+
+  resource:
+    attributes:
+      - key: cluster
+        value: deepa-bms-prod
+        action: upsert
+      - key: environment
+        value: production
+        action: upsert
+
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    send_timestamps: true
+    resource_to_telemetry_conversion:
+      enabled: true
+
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    labels:
+      attributes:
+        - level
+        - service
+        - container
+      resource:
+        - service.name
+        - cluster
+        - environment
+
+  jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
+
+  debug:
+    verbosity: normal
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp, jaeger]
+      processors: [memory_limiter, attributes/cluster, batch]
+      exporters: [jaeger, debug]
+
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/cluster, batch]
+      exporters: [prometheus, debug]
+
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [loki, debug]
+
+  telemetry:
+    logs:
+      level: info

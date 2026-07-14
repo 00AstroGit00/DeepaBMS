@@ -1,0 +1,77 @@
+# =============================================================================
+# DeepaBMS — Alertmanager Configuration
+# =============================================================================
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: ${ALERT_SMTP_SMARTHOST:-smtp.example.com:587}
+  smtp_from: ${ALERT_SMTP_FROM:-alerts@deepabms.local}
+  smtp_auth_username: ${ALERT_SMTP_USERNAME:-}
+  smtp_auth_password: ${ALERT_SMTP_PASSWORD:-}
+  smtp_require_tls: true
+
+route:
+  receiver: default
+  group_by: ["alertname", "service", "severity", "cluster", "environment"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity = "critical"
+      receiver: critical-receiver
+      group_wait: 10s
+      repeat_interval: 1h
+      continue: true
+    - matchers:
+        - severity = "warning"
+      receiver: warning-receiver
+      continue: true
+    - matchers:
+        - severity = "info"
+      receiver: info-receiver
+
+receivers:
+  - name: default
+    email_configs:
+      - to: ${ALERT_EMAIL_TO:-ops@deepabms.local}
+        send_resolved: true
+
+  - name: critical-receiver
+    email_configs:
+      - to: ${ALERT_EMAIL_TO:-ops@deepabms.local}
+        send_resolved: true
+    pagerduty_configs:
+      - routing_key: ${PAGERDUTY_ROUTING_KEY:-CHANGEME_PAGERDUTY_ROUTING_KEY}
+        severity: critical
+        send_resolved: true
+    slack_configs:
+      - api_url: ${SLACK_WEBHOOK_URL:-CHANGEME_SLACK_WEBHOOK_URL}
+        channel: ${SLACK_CHANNEL:-#deepabms-critical}
+        send_resolved: true
+
+  - name: warning-receiver
+    email_configs:
+      - to: ${ALERT_EMAIL_TO:-ops@deepabms.local}
+        send_resolved: true
+    slack_configs:
+      - api_url: ${SLACK_WEBHOOK_URL:-CHANGEME_SLACK_WEBHOOK_URL}
+        channel: ${SLACK_CHANNEL:-#deepabms-alerts}
+        send_resolved: true
+
+  - name: info-receiver
+    slack_configs:
+      - api_url: ${SLACK_WEBHOOK_URL:-CHANGEME_SLACK_WEBHOOK_URL}
+        channel: ${SLACK_CHANNEL_INFO:-#deepabms-info}
+        send_resolved: true
+
+inhibit_rules:
+  - source_matchers:
+      - severity = "critical"
+    target_matchers:
+      - severity = "warning"
+    equal: ["alertname", "service", "instance"]
+  - source_matchers:
+      - severity = "warning"
+    target_matchers:
+      - severity = "info"
+    equal: ["alertname", "service", "instance"]

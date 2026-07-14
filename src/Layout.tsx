@@ -35,6 +35,7 @@ import Reports from './screens/Reports';
 import Users from './screens/Users';
 import Settings from './screens/Settings';
 import Analytics from './screens/Analytics';
+import EmployeeDashboard from './screens/EmployeeDashboard';
 
 const SCREENS_MAP: Record<string, React.ComponentType<{ navigation: any }>> = {
   Dashboard,
@@ -49,7 +50,8 @@ const SCREENS_MAP: Record<string, React.ComponentType<{ navigation: any }>> = {
   Reports,
   Users,
   Settings,
-  Analytics
+  Analytics,
+  EmployeeDashboard
 };
 
 const ROLE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -59,7 +61,8 @@ const ROLE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   reception: 'desktop-outline',
   fnb: 'restaurant-outline',
   barstaff: 'wine-outline',
-  accountant: 'calculator-outline'
+  accountant: 'calculator-outline',
+  employee: 'person-outline'
 };
 
 interface MenuItem {
@@ -83,6 +86,7 @@ const MENU_ITEMS: MenuItem[] = [
   { key: 'Reports', label: 'Reports & GST', icon: 'stats-chart-outline', section: 'ANALYSIS', perm: 'reports' },
   { key: 'Analytics', label: 'Analytics Board', icon: 'pie-chart-outline', perm: 'reports' },
   { key: 'Users', label: 'Users & Access', icon: 'shield-checkmark-outline', perm: 'users' },
+  { key: 'EmployeeDashboard', label: 'My Dashboard', icon: 'person-outline', section: 'SELF SERVICE', perm: 'selfservice' },
   { key: 'Settings', label: 'Settings & More', icon: 'settings-outline', perm: null }
 ];
 

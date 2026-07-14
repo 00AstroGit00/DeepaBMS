@@ -1,45 +1,27 @@
 version: '3.8'
 
 services:
-  # 1. Relational database storage (PostgreSQL)
-  postgres:
-    image: postgres:15-alpine
-    container_name: deepa-bms-postgres
-    restart: always
-    environment:
-      POSTGRES_DB: deepa_bms
-      POSTGRES_USER: deepa_admin
-      POSTGRES_PASSWORD: secret_db_password_101
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    networks:
-      - bms-net
-
-  # 2. Express API Backend
+  # 1. Express API Backend (SQLite)
   backend:
     build:
       context: ./apps/backend
       dockerfile: Dockerfile
     container_name: deepa-bms-backend
     restart: always
+    env_file:
+      - .env
     environment:
       NODE_ENV: production
       PORT: 3000
-      JWT_SECRET: deepa-bms-secret-key-101
-      DATABASE_URL: postgres://deepa_admin:secret_db_password_101@postgres:5432/deepa_bms
       SQLITE_DB_PATH: /app/data/deepa-bms.db
     ports:
       - "3000:3000"
     volumes:
       - bms-sqlite:/app/data
-    depends_on:
-      - postgres
     networks:
       - bms-net
 
-  # 3. Static Nginx Web Router (Web Client app delivery)
+  # 2. Static Nginx Web Router (Web Client app delivery)
   web:
     image: nginx:stable-alpine
     container_name: deepa-bms-web-client
@@ -51,7 +33,7 @@ services:
     networks:
       - bms-net
 
-  # 4. Cloudflare Tunnel (Enables secure sync from any network/internet without port forwarding)
+  # 3. Cloudflare Tunnel (Enables secure sync from any network/internet without port forwarding)
   # OPTION A: Persistent Tunnel (Recommended for production, requires a Cloudflare Account & token)
   # To use: create a tunnel in Cloudflare Dashboard, get the token, and add it to your .env file
   tunnel-prod:
@@ -83,7 +65,6 @@ services:
       - demo
 
 volumes:
-  pgdata:
   bms-sqlite:
 
 networks:

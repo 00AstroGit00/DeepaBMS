@@ -1,0 +1,37 @@
+# =============================================================================
+# DeepaBMS — Grafana Datasources (provisioning)
+# =============================================================================
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s
+    editable: true
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      maxLines: 1000
+    editable: true
+
+  - name: PostgreSQL
+    type: postgres
+    access: proxy
+    url: ${GRAFANA_PG_HOST:-postgres}:${GRAFANA_PG_PORT:-5432}
+    database: ${GRAFANA_PG_DATABASE:-deepabms}
+    user: ${GRAFANA_PG_USER:-grafana}
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1500
+      timescaledb: false
+    secureJsonData:
+      password: ${GRAFANA_PG_PASSWORD:-CHANGEME_PG_PASSWORD}
+    editable: true

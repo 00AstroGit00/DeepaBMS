@@ -1,0 +1,102 @@
+# Default values for deepa-bms.
+# Architecture: SQLite (single-process, WAL mode).
+
+# Backend replicas — must be 1 for SQLite (single-writer constraint).
+replicaCount: 1
+
+image:
+  repository: ghcr.io/deepabms/backend
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+# Web (nginx) image used to serve the static client.
+web:
+  image:
+    repository: nginx
+    pullPolicy: IfNotPresent
+    tag: stable-alpine
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# -- Application configuration (rendered into a ConfigMap) --
+config:
+  nodeEnv: production
+  port: 3000
+  sqliteDbPath: /app/data/deepa-bms.db
+  logLevel: info
+  metricsEnabled: true
+  corsOrigins: "https://bms.example.com"
+  trustProxy: true
+
+# -- Secrets reference --
+secrets:
+  # existingSecret: deepa-bms-secrets
+  jwtSecret: "CHANGE_ME_JWT_SECRET"
+  jwtIssuer: deepa-bms
+  jwtAudience: deepa-bms-clients
+
+service:
+  backend:
+    type: ClusterIP
+    port: 3000
+  web:
+    type: LoadBalancer
+    port: 80
+
+# -- Ingress --
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: bms.example.com
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: backend
+          port: 3000
+        - path: /
+          pathType: Prefix
+          service: web
+          port: 80
+  tls:
+    - secretName: deepa-bms-tls
+      hosts:
+        - bms.example.com
+
+# -- Resource requests/limits for all components --
+resources:
+  backend:
+    requests:
+      memory: 256Mi
+      cpu: 250m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  web:
+    requests:
+      memory: 64Mi
+      cpu: 50m
+    limits:
+      memory: 128Mi
+      cpu: 200m
+
+# -- Autoscaling: disabled for SQLite (single-writer requires exactly 1 replica) --
+autoscaling:
+  enabled: false
+
+# -- SQLite persistence --
+sqlite:
+  persistence:
+    enabled: true
+    size: 2Gi
+    storageClass: ""
+
+# -- Pod scheduling --
+nodeSelector: {}
+tolerations: []
+affinity: {}

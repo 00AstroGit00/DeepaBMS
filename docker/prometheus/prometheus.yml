@@ -1,0 +1,43 @@
+# =============================================================================
+# DeepaBMS — Prometheus Configuration
+# =============================================================================
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: deepa-bms-prod
+    environment: production
+
+rule_files:
+  - /etc/prometheus/alerts/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: backend
+    metrics_path: /api/platform/metrics
+    static_configs:
+      - targets: ["backend:3000"]
+        labels:
+          service: backend
+
+  - job_name: nginx-exporter
+    static_configs:
+      - targets: ["nginx-exporter:9113"]
+        labels:
+          service: nginx
+
+  - job_name: node-exporter
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels:
+          service: node
+
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+        labels:
+          service: cadvisor

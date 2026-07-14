@@ -1,0 +1,75 @@
+name: Backup
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: Database Backup
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: deepa
+          POSTGRES_PASSWORD: deepa
+          POSTGRES_DB: deepa_bms
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U deepa"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: deepa
+      PGPASSWORD: deepa
+      PGDATABASE: deepa_bms
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Dump database
+        run: |
+          TIMESTAMP="$(date +'%Y-%m-%d-%H%M')"
+          echo "TIMESTAMP=$TIMESTAMP" >> "$GITHUB_ENV"
+          pg_dump --clean --if-exists --no-owner "$PGDATABASE" > "deepa-bms-$TIMESTAMP.sql"
+
+      - name: Compress dump
+        run: gzip -9 "deepa-bms-$TIMESTAMP.sql"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Upload to S3
+        run: |
+          aws s3 cp "deepa-bms-$TIMESTAMP.sql.gz" \
+            "s3://${{ secrets.BACKUP_BUCKET }}/postgres/deepa-bms-$TIMESTAMP.sql.gz"
+
+      - name: Cleanup old backups (S3, 30 days)
+        run: |
+          aws s3 ls "s3://${{ secrets.BACKUP_BUCKET }}/postgres/" \
+            | awk '{print $4}' \
+            | while read -r key; do
+              age_days=$(( ( $(date +%s) - $(date -d "${key:11:10}" +%s 2>/dev/null) ) / 86400 ))
+              if [[ "${age_days:-0}" -gt 30 ]]; then
+                aws s3 rm "s3://${{ secrets.BACKUP_BUCKET }}/postgres/$key"
+              fi
+            done || true

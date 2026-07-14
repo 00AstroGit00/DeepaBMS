@@ -1,0 +1,15 @@
+# =============================================================================
+# DeepaBMS — Grafana Dashboard Provider (provisioning)
+# =============================================================================
+apiVersion: 1
+
+providers:
+  - name: deepa-bms
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false
+      folder: DeepaBMS

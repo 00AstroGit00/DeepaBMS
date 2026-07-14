@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: deepa-bms-config
+  namespace: deepa-bms
+  labels:
+    app.kubernetes.io/part-of: deepa-bms
+data:
+  NODE_ENV: "production"
+  PORT: "3000"
+  SQLITE_DB_PATH: "/app/data/deepa-bms.db"
+  LOG_LEVEL: "info"
+  METRICS_ENABLED: "true"
+  CORS_ORIGINS: "https://bms.example.com"
+  TRUST_PROXY: "true"

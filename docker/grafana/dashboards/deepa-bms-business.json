@@ -1,0 +1,268 @@
+{
+  "id": null,
+  "uid": "deepa-bms-business",
+  "title": "DeepaBMS \u2014 Business",
+  "description": "Revenue, occupancy, covers, bar sales, inventory turnover and cash flow sourced from backend metrics.",
+  "tags": [
+    "deepabms",
+    "business"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1h",
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "editable": true,
+  "theme": "dark",
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "10.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Timeseries",
+      "version": ""
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "label": "Prometheus",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "env",
+        "type": "query",
+        "query": "label_values(up, environment)",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "label": "Environment",
+        "current": {
+          "text": "production",
+          "value": "production"
+        },
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 700,
+      "title": "Business Metrics",
+      "type": "row",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false
+    },
+    {
+      "id": 701,
+      "title": "Revenue \u2014 Daily",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(deepa_bms_revenue_total{env=~\"$env\"}[1d]))",
+          "legendFormat": "revenue",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 702,
+      "title": "Revenue \u2014 Weekly",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(deepa_bms_revenue_total{env=~\"$env\"}[7d]))",
+          "legendFormat": "weekly",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 703,
+      "title": "Revenue \u2014 Monthly",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(deepa_bms_revenue_total{env=~\"$env\"}[30d]))",
+          "legendFormat": "monthly",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 704,
+      "title": "Occupancy",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 17
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "deepa_bms_occupancy_ratio{env=~\"$env\"} * 100",
+          "legendFormat": "occupancy %",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 705,
+      "title": "Restaurant Covers",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 17
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(deepa_bms_covers_total{env=~\"$env\"}[1d])) by (outlet)",
+          "legendFormat": "{{outlet}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 706,
+      "title": "Bar Sales",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(deepa_bms_bar_sales_total{env=~\"$env\"}[1d])) by (category)",
+          "legendFormat": "{{category}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 707,
+      "title": "Inventory Turnover",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "deepa_bms_inventory_turnover{env=~\"$env\"}",
+          "legendFormat": "turnover",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 708,
+      "title": "Cash Flow",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "deepa_bms_cash_flow{env=~\"$env\"}",
+          "legendFormat": "cash flow",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

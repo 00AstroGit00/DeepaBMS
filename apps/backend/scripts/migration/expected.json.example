@@ -1,0 +1,12 @@
+{
+  "employees": { "rows": 0, "checksum": "" },
+  "credit_accounts": { "rows": 0, "checksum": "" },
+  "suppliers": { "rows": 0, "checksum": "" },
+  "inventory": { "rows": 0, "checksum": "" },
+  "liquor": { "rows": 0, "checksum": "" },
+  "rooms": { "rows": 0, "checksum": "" },
+  "stays_archive": { "rows": 0, "checksum": "" },
+  "bank_accounts": { "rows": 0, "checksum": "" },
+  "supplier_invoices": { "rows": 0, "checksum": "" },
+  "trialBalance": 0.0
+}

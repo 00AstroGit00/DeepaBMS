@@ -81,6 +81,11 @@ export const ROLE_INFO: Record<string, RoleDetail> = {
     desc: 'Read/verify money flows: day book, banking, credits, reports',
     perms: ['dashboard', 'daybook', 'credits', 'banking', 'reports'],
   },
+  employee: {
+    label: 'Employee',
+    desc: 'View own profile, attendance, leave balance, payslips, and apply for leave/advances',
+    perms: ['selfservice'],
+  },
 };
 
 export const DEFAULT_USERS: User[] = [
@@ -129,6 +134,14 @@ export const DEFAULT_USERS: User[] = [
     name: 'Manoj (Bar Counter)',
     role: 'barstaff',
     pin: '6789',
+    active: true,
+    createdAt: new Date('2025-09-22T00:00:00Z').toISOString(),
+  },
+  {
+    id: 'u-emp-01',
+    name: 'Suresh (Staff)',
+    role: 'employee',
+    pin: '1111',
     active: true,
     createdAt: new Date('2025-09-22T00:00:00Z').toISOString(),
   },

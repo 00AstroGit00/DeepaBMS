@@ -1,0 +1,30 @@
+{{- $fullname := include "deepa-bms.fullname" . -}}
+{{- $releaseNamespace := .Release.Namespace -}}
+{{- $webSvc := include "deepa-bms.componentName" (dict "root" . "component" "web") -}}
+{{- $backendSvc := include "deepa-bms.componentName" (dict "root" . "component" "backend") -}}
+
+{{- if .Values.ingress.enabled }}
+1. Get the application URL by running these commands:
+{{- range .Values.ingress.hosts }}
+   http://{{ .host }}
+{{- end }}
+   Note: Ensure DNS for the host points at your Ingress controller and that
+   cert-manager can issue a certificate for the TLS host(s).
+
+{{- else }}
+1. Watch the web Service ({{ $webSvc }}) to obtain its external address:
+
+   kubectl --namespace {{ $releaseNamespace }} get svc -w {{ $webSvc }}
+{{- end }}
+
+2. Backend API is reachable inside the cluster at:
+   http://{{ $backendSvc }}:{{ .Values.service.backend.port }}
+
+3. Verify pods are running:
+
+   kubectl --namespace {{ $releaseNamespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+
+4. Data is persisted via a PVC mounted at /app/data inside the backend pod.
+   The SQLite database file is /app/data/deepa-bms.db.
+
+IMPORTANT: Update the JWT_SECRET value before using this chart in production.

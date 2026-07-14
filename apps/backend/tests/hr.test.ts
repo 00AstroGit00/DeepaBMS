@@ -3881,8 +3881,8 @@ describe('HR — Employee Self-Service', () => {
     );
 
     await run(
-      `INSERT INTO leave_balances (id, employee_id, leave_type_id, year, total_days, used_days, remaining_days)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO leave_balances (id, employee_id, leave_type_id, year, total_days, used_days)
+       VALUES (?, ?, ?, ?, ?, ?)`,
       [
         uid('lb'),
         selfEmpId,
@@ -3890,7 +3890,6 @@ describe('HR — Employee Self-Service', () => {
         new Date().getFullYear(),
         12,
         0,
-        12,
       ],
     );
   });
@@ -3899,9 +3898,9 @@ describe('HR — Employee Self-Service', () => {
     const year = new Date().getFullYear();
     const balances = await LeaveEngine.getLeaveBalance(selfEmpId, year);
     expect(balances.length).toBeGreaterThanOrEqual(1);
-    const cl = balances.find((b) => b.leaveTypeName === 'Casual Leave');
+    const cl = balances.find((b) => b.leaveTypeId === selfLeaveTypeId);
     expect(cl).toBeDefined();
-    expect(cl!.remainingDays).toBe(12);
+    expect(cl!.availableDays).toBe(12);
   });
 
   test('POST /self/apply-leave — Creates leave application', async () => {

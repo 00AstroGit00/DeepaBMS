@@ -121,6 +121,7 @@ export interface Employee {
   reportingToId: string | null;
   employmentType: EmploymentType;
   status: EmployeeStatus;
+  salary: number;
   joinDate: string;
   confirmationDate: string | null;
   exitDate: string | null;

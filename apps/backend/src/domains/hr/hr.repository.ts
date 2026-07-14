@@ -105,6 +105,7 @@ function rowToEmployee(row: any): T.Employee {
     reportingToId: row.reporting_to_id || null,
     employmentType: row.employment_type || ('permanent' as T.EmploymentType),
     status: row.status || ('active' as T.EmployeeStatus),
+    salary: Number(row.salary || 0),
     joinDate: row.join_date || '',
     confirmationDate: row.confirmation_date || null,
     exitDate: row.exit_date || null,

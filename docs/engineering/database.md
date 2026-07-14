@@ -1,7 +1,9 @@
+> ⚠️ **Legacy architecture notes.** DeepaBMS v1.0.0 is deployed on **SQLite only** (single-writer, single replica, no external cache). Any mentions of other relational databases or external caches below are historical design notes, not the current architecture. See `docs/engineering/ARCHITECTURE.md` for the authoritative design.
+
 # DeepaBMS Database Schema
 
 ## Overview
-- **Server DB**: SQLite3 (primary), PostgreSQL (optional via Docker Compose)
+- **Server DB**: SQLite3 (single-writer, production datastore — see `ARCHITECTURE.md`)
 - **Client DB**: AsyncStorage (JSON document store)
 - **Schema**: `apps/backend/src/schema.sql` — 20 tables
 

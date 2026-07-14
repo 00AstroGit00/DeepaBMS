@@ -1,3 +1,5 @@
+> ⚠️ **Legacy architecture notes.** DeepaBMS v1.0.0 is deployed on **SQLite only** (single-writer, single replica, no external cache). Any mentions of other relational databases or external caches below are historical design notes, not the current architecture. See `docs/engineering/ARCHITECTURE.md` for the authoritative design.
+
 # DeepaBMS v1.0.0 — Upgrade Guide
 
 DeepaBMS v1.0.0 standardises on **SQLite** as the single production datastore.

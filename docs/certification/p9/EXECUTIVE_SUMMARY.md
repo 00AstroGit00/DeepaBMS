@@ -1,3 +1,5 @@
+> ⚠️ **Legacy architecture notes.** DeepaBMS v1.0.0 is deployed on **SQLite only** (single-writer, single replica, no external cache). Any mentions of other relational databases or external caches below are historical design notes, not the current architecture. See `docs/engineering/ARCHITECTURE.md` for the authoritative design.
+
 # Executive Summary — DeepaBMS v1.0 Certification
 
 **Bottom line: 🔴 GA is BLOCKED.** The implementation work for the P8 release

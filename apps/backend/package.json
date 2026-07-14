@@ -1,6 +1,7 @@
 {
   "name": "deepa-bms-backend",
   "version": "1.0.0",
+  "license": "MIT",
   "description": "Production REST API backend for Deepa BMS",
   "main": "dist/index.js",
   "scripts": {

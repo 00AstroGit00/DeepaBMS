@@ -411,9 +411,9 @@ git push origin feature/new-feature
 
 # 📄 License
 
-This project is currently released without a specified license.
+Licensed under the [MIT License](./LICENSE).
 
-Add an appropriate license (MIT, Apache 2.0, GPL, etc.) before public production use.
+Copyright (c) 2026 DeepaBMS. See the [LICENSE](./LICENSE) file for the full text.
 
 ---
 

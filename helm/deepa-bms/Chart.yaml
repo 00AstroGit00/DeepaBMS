@@ -2,14 +2,14 @@ apiVersion: v2
 name: deepa-bms
 description: DeepaBMS - business management system (SQLite, backend, web)
 type: application
-version: 1.0.0
-appVersion: 1.0.0
+version: 1.0.1
+appVersion: 1.0.1
 keywords:
   - deepabms
   - bms
   - business
 home: https://bms.example.com
 sources:
-  - https://github.com/deepabms/DeepaBMS
+  - https://github.com/00AstroGit00/DeepaBMS
 maintainers:
   - name: DeepaBMS Maintainers

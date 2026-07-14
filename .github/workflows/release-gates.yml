@@ -86,12 +86,20 @@ jobs:
           kubectl kustomize k8s/overlays/production > /tmp/k8s-prod.yaml
           kubectl kustomize k8s/overlays/staging > /tmp/k8s-staging.yaml
 
+      - name: Install kubeconform
+        run: |
+          KVER=0.6.7
+          curl -sSL "https://github.com/yannh/kubeconform/releases/download/v${KVER}/kubeconform_${KVER}_linux_amd64.tar.gz" -o /tmp/kc.tgz
+          tar -xzf /tmp/kc.tgz -C /tmp
+          sudo mv /tmp/kubeconform /usr/local/bin/kubeconform
+
       - name: Validate manifests with kubeconform
-        uses: yannh/kubeconform-action@v1
-        with:
-          files: /tmp/helm-rendered.yaml,/tmp/k8s-base.yaml,/tmp/k8s-prod.yaml,/tmp/k8s-staging.yaml
-          strict: true
-          summary: true
+        run: |
+          kubeconform -strict -summary \
+            /tmp/helm-rendered.yaml \
+            /tmp/k8s-base.yaml \
+            /tmp/k8s-prod.yaml \
+            /tmp/k8s-staging.yaml
 
   perf-benchmark:
     name: F-6 Performance Benchmark (k6 smoke load)

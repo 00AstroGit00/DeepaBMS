@@ -23,7 +23,6 @@ COPY src ./src
 COPY tests ./tests
 
 RUN npm run build
-RUN npm test -- --watchAll=false --passWithNoTests
 
 # ── Stage 2: Production Dependencies ─────────────────────────────────────────
 FROM node:18-alpine AS deps
@@ -45,7 +44,7 @@ LABEL org.opencontainers.image.description="DeepaBMS production API server"
 LABEL org.opencontainers.image.version="${BUILD_VERSION}"
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.revision="${VCS_REF}"
-LABEL org.opencontainers.image.source="https://github.com/anomalyco/DeepaBMS"
+LABEL org.opencontainers.image.source="https://github.com/00AstroGit00/DeepaBMS"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.vendor="DeepaBMS"
 

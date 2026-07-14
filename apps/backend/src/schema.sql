@@ -82,22 +82,6 @@ CREATE TABLE IF NOT EXISTS txns (
   FOREIGN KEY (bank_id) REFERENCES bank_accounts(id)
 );
 
--- 6. Hotel Room Management
-CREATE TABLE IF NOT EXISTS rooms (
-  id VARCHAR(50) PRIMARY KEY,
-  no VARCHAR(10) NOT NULL UNIQUE,
-  category VARCHAR(50) NOT NULL,
-  rate DECIMAL(10, 2) NOT NULL CHECK(rate >= 0),
-  status VARCHAR(10) NOT NULL CHECK(status IN ('vacant', 'occupied', 'cleaning')),
-  guest_name VARCHAR(100) NULL,
-  guest_phone VARCHAR(20) NULL,
-  guest_id_proof VARCHAR(100) NULL,
-  guest_adults INT DEFAULT 1,
-  guest_check_in TIMESTAMP NULL,
-  guest_advance DECIMAL(10, 2) DEFAULT 0.00,
-  guest_advance_mode VARCHAR(10) NULL
-);
-
 CREATE TABLE IF NOT EXISTS stays_archive (
   id VARCHAR(50) PRIMARY KEY,
   room_no VARCHAR(10) NOT NULL,
@@ -1528,8 +1512,8 @@ CREATE TABLE IF NOT EXISTS weekly_summaries (
   gst_payable DECIMAL(14,2) DEFAULT 0,
   gst_input_credit DECIMAL(14,2) DEFAULT 0,
   inventory_value DECIMAL(14,2) DEFAULT 0,
-  UNIQUE(week_start, week_end),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(week_start, week_end)
 );
 
 CREATE TABLE IF NOT EXISTS monthly_summaries (
@@ -1566,8 +1550,8 @@ CREATE TABLE IF NOT EXISTS monthly_summaries (
   cancellation_percent DECIMAL(5,2) DEFAULT 0,
   refund_percent DECIMAL(5,2) DEFAULT 0,
   department_profits TEXT DEFAULT '[]',
-  UNIQUE(year, month),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(year, month)
 );
 
 CREATE TABLE IF NOT EXISTS yearly_summaries (

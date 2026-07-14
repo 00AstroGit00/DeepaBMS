@@ -26,7 +26,7 @@ jobs:
       # DEPENDENCY_REMEDIATION.md. Blocking on HIGH here would block every
       # release while the upgrade is deferred; the advisories remain fully
       # visible in the audit JSON artifact and Snyk scan below.
-      - name: npm audit (gate: critical)
+      - name: 'npm audit (gate critical)'
         run: npm audit --audit-level=critical
 
       - name: npm audit (full report, non-blocking)

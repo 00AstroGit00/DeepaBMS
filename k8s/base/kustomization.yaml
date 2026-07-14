@@ -14,6 +14,5 @@ resources:
   - service-backend.yaml
   - service-web.yaml
   - ingress.yaml
-  - hpa-backend.yaml
 
 secretGenerator: []

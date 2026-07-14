@@ -15,7 +15,6 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/deepa-bms-backend
 
 jobs:
   lint-test:
@@ -45,6 +44,9 @@ jobs:
       - name: Resolve version
         id: version
         run: bash scripts/ci/version.sh
+
+      - name: Resolve image name (lowercase for GHCR)
+        run: echo "IMAGE_NAME=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/deepa-bms-backend" >> "$GITHUB_ENV"
 
       - name: Build and push image
         id: build

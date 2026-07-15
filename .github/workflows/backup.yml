@@ -10,48 +10,83 @@ permissions:
 
 jobs:
   backup:
-    name: Database Backup
+    name: Database Backup (SQLite)
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: deepa
-          POSTGRES_PASSWORD: deepa
-          POSTGRES_DB: deepa_bms
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U deepa"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      PGHOST: localhost
-      PGPORT: 5432
-      PGUSER: deepa
-      PGPASSWORD: deepa
-      PGDATABASE: deepa_bms
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: apps/backend/package-lock.json
 
-      - name: Dump database
+      - name: Install backend dependencies
+        working-directory: apps/backend
+        run: npm ci
+
+      - name: Build backend
+        working-directory: apps/backend
+        run: npm run build
+
+      - name: Copy schema to dist
+        working-directory: apps/backend
+        run: cp src/schema.sql dist/schema.sql
+
+      - name: Start backend with SQLite
+        run: |
+          mkdir -p /tmp/backup-data
+          cd apps/backend
+          SQLITE_DB_PATH=/tmp/backup-data/deepa-bms.db \
+          JWT_SECRET=backup-secret \
+          node dist/index.js &
+          BACKEND_PID=$!
+          for i in $(seq 1 30); do
+            if curl -fs http://localhost:3000/health/live; then break; fi
+            sleep 2
+          done
+
+      - name: Run backup script
         run: |
           TIMESTAMP="$(date +'%Y-%m-%d-%H%M')"
           echo "TIMESTAMP=$TIMESTAMP" >> "$GITHUB_ENV"
-          pg_dump --clean --if-exists --no-owner "$PGDATABASE" > "deepa-bms-$TIMESTAMP.sql"
+          bash scripts/backup/production-backup.sh
 
-      - name: Compress dump
-        run: gzip -9 "deepa-bms-$TIMESTAMP.sql"
+          # If the script didn't produce output, do a manual backup
+          if [ ! -f "backups/deepa-bms-$TIMESTAMP.db" ]; then
+            mkdir -p backups
+            cp /tmp/backup-data/deepa-bms.db "backups/deepa-bms-$TIMESTAMP.db"
+            gzip -9 "backups/deepa-bms-$TIMESTAMP.db"
+          fi
+
+      - name: Verify backup integrity
+        run: |
+          BACKUP_FILE=$(ls -t backups/*.gz 2>/dev/null | head -1)
+          if [ -z "$BACKUP_FILE" ]; then
+            echo "No backup file found!"
+            exit 1
+          fi
+          echo "Backup file: $BACKUP_FILE"
+          gunzip -k "$BACKUP_FILE"
+          BACKUP_UNZIPPED="${BACKUP_FILE%.gz}"
+          file "$BACKUP_UNZIPPED"
+          SIZE=$(stat --format=%s "$BACKUP_UNZIPPED" 2>/dev/null)
+          echo "Backup size: $SIZE bytes"
+          if [ "$SIZE" -lt 1000 ]; then
+            echo "Backup suspiciously small (< 1KB)"
+            exit 1
+          fi
+          echo "Backup integrity verified"
+
+      - name: Stop backend
+        if: always()
+        run: kill $BACKEND_PID 2>/dev/null || true
 
       - name: Configure AWS credentials
+        if: false
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -59,17 +94,14 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Upload to S3
+        if: false
         run: |
-          aws s3 cp "deepa-bms-$TIMESTAMP.sql.gz" \
-            "s3://${{ secrets.BACKUP_BUCKET }}/postgres/deepa-bms-$TIMESTAMP.sql.gz"
+          aws s3 cp "backups/deepa-bms-$TIMESTAMP.db.gz" \
+            "s3://${{ secrets.BACKUP_BUCKET }}/sqlite/deepa-bms-$TIMESTAMP.db.gz"
 
-      - name: Cleanup old backups (S3, 30 days)
-        run: |
-          aws s3 ls "s3://${{ secrets.BACKUP_BUCKET }}/postgres/" \
-            | awk '{print $4}' \
-            | while read -r key; do
-              age_days=$(( ( $(date +%s) - $(date -d "${key:11:10}" +%s 2>/dev/null) ) / 86400 ))
-              if [[ "${age_days:-0}" -gt 30 ]]; then
-                aws s3 rm "s3://${{ secrets.BACKUP_BUCKET }}/postgres/$key"
-              fi
-            done || true
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-backup
+          path: backups/*.gz
+          retention-days: 30

@@ -244,3 +244,193 @@ export interface FilterParams {
   orderBy?: string;
   orderDir?: 'asc' | 'desc';
 }
+
+// ═════════════════════════════════════════════════════════════════════════
+// TENANT TYPES (P13-1 Tenant Control Plane)
+// ═════════════════════════════════════════════════════════════════════════
+
+export type TenantPlan =
+  | 'starter'
+  | 'professional'
+  | 'enterprise'
+  | 'custom'
+  | 'single'
+  | 'growth';
+
+export type TenantLifecycleState =
+  | 'trial'
+  | 'active'
+  | 'past_due'
+  | 'suspended'
+  | 'archived'
+  | 'deleted';
+
+export type TenantStatus = TenantLifecycleState;
+
+export const VALID_TENANT_PLANS: readonly TenantPlan[] = [
+  'starter',
+  'professional',
+  'enterprise',
+  'custom',
+  'single',
+  'growth',
+];
+
+export const VALID_TENANT_LIFECYCLE: readonly TenantLifecycleState[] = [
+  'trial',
+  'active',
+  'past_due',
+  'suspended',
+  'archived',
+  'deleted',
+];
+
+export const TENANT_LIFECYCLE_TRANSITIONS: Record<
+  TenantLifecycleState,
+  TenantLifecycleState[]
+> = {
+  trial: ['active', 'suspended', 'archived'],
+  active: ['past_due', 'suspended', 'archived'],
+  past_due: ['active', 'suspended', 'archived'],
+  suspended: ['active', 'archived', 'deleted'],
+  archived: ['deleted'],
+  deleted: [],
+};
+
+export interface TenantBranding {
+  logoUrl?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  faviconUrl?: string;
+  customDomain?: string;
+  loginTheme?: Record<string, any>;
+  invoiceTemplate?: string;
+  reportHeader?: string;
+  reportFooter?: string;
+}
+
+export interface TenantQuota {
+  maxRooms: number;
+  maxUsers: number;
+  maxBranches: number;
+  storageGB: number;
+  apiCallsPerDay: number;
+}
+
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  plan: TenantPlan;
+  status: TenantLifecycleState;
+  branding: TenantBranding | null;
+  maxRooms: number;
+  maxUsers: number;
+  contactEmail: string | null;
+  contactName: string | null;
+  domain: string | null;
+  locale: string | null;
+  timezone: string | null;
+  features: string[] | null;
+  metadata: Record<string, any> | null;
+  subscriptionEndsAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTenantDto {
+  name: string;
+  slug: string;
+  plan: TenantPlan;
+  contactEmail?: string;
+  contactName?: string;
+  domain?: string;
+  locale?: string;
+  timezone?: string;
+  maxRooms?: number;
+  maxUsers?: number;
+  branding?: TenantBranding;
+  features?: string[];
+  metadata?: Record<string, any>;
+}
+
+export interface UpdateTenantDto {
+  name?: string;
+  slug?: string;
+  plan?: TenantPlan;
+  contactEmail?: string;
+  contactName?: string;
+  domain?: string;
+  locale?: string;
+  timezone?: string;
+  maxRooms?: number;
+  maxUsers?: number;
+  metadata?: Record<string, any>;
+}
+
+export interface TenantListFilter {
+  status?: TenantLifecycleState;
+  plan?: TenantPlan;
+  search?: string;
+  offset?: number;
+  limit?: number;
+  orderBy?: string;
+  orderDir?: 'asc' | 'desc';
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// BILLING TYPES (P13-4 Subscription & Licensing)
+// ═════════════════════════════════════════════════════════════════════════
+
+export type BillingProvider = 'stripe' | 'razorpay' | 'manual';
+
+export type UsagePeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+
+export interface BillingSubscription {
+  id: string;
+  tenantId: string;
+  plan: TenantPlan;
+  provider: BillingProvider;
+  providerSubscriptionId: string | null;
+  status: 'active' | 'past_due' | 'canceled' | 'incomplete' | 'trialing';
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  canceledAt: string | null;
+  trialEndsAt: string | null;
+  metadata: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BillingInvoice {
+  id: string;
+  tenantId: string;
+  subscriptionId: string | null;
+  provider: BillingProvider;
+  providerInvoiceId: string | null;
+  number: string | null;
+  amount: number;
+  currency: string;
+  status: 'draft' | 'open' | 'paid' | 'void' | 'uncollectible';
+  paidAt: string | null;
+  dueDate: string | null;
+  lines: BillingInvoiceLine[];
+  metadata: Record<string, any>;
+  createdAt: string;
+}
+
+export interface BillingInvoiceLine {
+  description: string;
+  amount: number;
+  quantity: number;
+  period: { start: string; end: string } | null;
+}
+
+export interface UsageMetric {
+  id: string;
+  tenantId: string;
+  metric: string;
+  value: number;
+  recordedAt: string;
+  period: UsagePeriod;
+}

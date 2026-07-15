@@ -15,8 +15,10 @@ spec:
     - hosts:
         - bms.example.com
       secretName: deepa-bms-tls
+      # ^ FIXME: Replace bms.example.com with actual production domain
   rules:
     - host: bms.example.com
+      # ^ FIXME: Replace with actual production domain
       http:
         paths:
           - path: /api

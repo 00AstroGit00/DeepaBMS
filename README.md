@@ -2,6 +2,14 @@
 
 > **A comprehensive Hospitality Business Management System for Restaurants, Bars, Hotels, and Hospitality Enterprises.**
 
+![Version](https://img.shields.io/badge/version-2.0.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Node](https://img.shields.io/badge/node-22.x-brightgreen)
+[![Build](https://github.com/00AstroGit00/DeepaBMS/actions/workflows/build.yml/badge.svg)](https://github.com/00AstroGit00/DeepaBMS/actions/workflows/build.yml)
+[![Test](https://github.com/00AstroGit00/DeepaBMS/actions/workflows/test.yml/badge.svg)](https://github.com/00AstroGit00/DeepaBMS/actions/workflows/test.yml)
+[![Security](https://github.com/00AstroGit00/DeepaBMS/actions/workflows/security.yml/badge.svg)](https://github.com/00AstroGit00/DeepaBMS/actions/workflows/security.yml)
+[![Release Gates](https://github.com/00AstroGit00/DeepaBMS/actions/workflows/release-gates.yml/badge.svg)](https://github.com/00AstroGit00/DeepaBMS/actions/workflows/release-gates.yml)
+
 DeepaBMS is an enterprise-grade Business Management System (BMS) designed specifically for the hospitality industry. It provides an integrated platform for managing restaurant operations, bar inventory, hotel rooms, finance, GST reporting, employee management, analytics, and business intelligence from a single dashboard.
 
 ---
@@ -244,10 +252,12 @@ DeepaBMS/
 
 ## Prerequisites
 
-- Node.js (Latest LTS)
+- Node.js 22.x (LTS)
 - npm or Yarn
 - Expo CLI
 - Git
+- Docker (for container deployment)
+- Helm + kubectl (for Kubernetes deployment)
 
 ---
 
@@ -255,7 +265,6 @@ DeepaBMS/
 
 ```bash
 git clone https://github.com/00AstroGit00/DeepaBMS.git
-
 cd DeepaBMS
 ```
 
@@ -264,39 +273,61 @@ cd DeepaBMS
 ## Install Dependencies
 
 ```bash
+# Mobile app
 npm install
+
+# Backend
+cd apps/backend && npm install && cd ../..
 ```
 
 ---
 
-## Start Development Server
+## Development
 
+### Mobile App
 ```bash
-npm start
+npm start          # Expo dev server
+npm run android    # Run on Android
+npm run ios        # Run on iOS
+npm run web        # Run on web
+```
+
+### Backend API
+```bash
+cd apps/backend
+cp .env.example .env  # Configure JWT_SECRET
+npm run dev            # Start dev server on port 3000
 ```
 
 ---
 
-## Run on Android
+## Backend Production Build
 
 ```bash
-npm run android
+cd apps/backend
+npm run build                    # Compile TypeScript
+cp src/schema.sql dist/schema.sql  # Copy schema
+JWT_SECRET=<your-secret> npm start  # Start server
 ```
 
----
-
-## Run on iOS
-
+### Docker (Production)
 ```bash
-npm run ios
+docker build -t deepa-bms-backend -f apps/backend/Dockerfile.prod ./apps/backend
+docker run -d -p 3000:3000 \
+  -v sqlite-data:/app/data \
+  -e NODE_ENV=production \
+  -e JWT_SECRET=<your-secret> \
+  deepa-bms-backend
 ```
 
----
-
-## Run on Web
-
+### Docker Compose (Full Stack)
 ```bash
-npm run web
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### Kubernetes (Helm)
+```bash
+helm install deepa-bms ./helm/deepa-bms --set secrets.jwtSecret=<your-secret>
 ```
 
 ---

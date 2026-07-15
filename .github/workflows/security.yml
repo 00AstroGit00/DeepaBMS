@@ -67,7 +67,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build backend image
-        run: docker build -t deepa-bms-backend:scan -f apps/backend/Dockerfile ./apps/backend
+        run: docker build -t deepa-bms-backend:scan -f apps/backend/Dockerfile.prod ./apps/backend
 
       - name: Trivy vulnerability scan
         uses: aquasecurity/trivy-action@master

@@ -79,7 +79,7 @@ const UUID_RE = /^[a-z0-9][a-z0-9_-]{2,63}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const CURRENCY_RE = /^-?\d+(\.\d{1,2})?$/;
 
-function validateValue(
+export function validateValue(
   value: unknown,
   rule: ValidationRule,
 ): ValidationFieldError | null {
@@ -275,8 +275,17 @@ function validateValue(
           suggestion: `Provide a date in YYYY-MM-DD format`,
         };
       }
-      const d = new Date(value as string);
-      if (isNaN(d.getTime())) {
+      const parts = (value as string).split('-');
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const d = new Date(Date.UTC(year, month, day));
+      if (
+        isNaN(d.getTime()) ||
+        d.getUTCFullYear() !== year ||
+        d.getUTCMonth() !== month ||
+        d.getUTCDate() !== day
+      ) {
         return {
           field,
           reason: 'invalid',
@@ -338,7 +347,7 @@ function validateValue(
 }
 
 // ── Mass assignment protection ──────────────────────────────────────
-function stripUnknown(
+export function stripUnknown(
   data: Record<string, unknown>,
   schema: SchemaDefinition,
 ): Record<string, unknown> {

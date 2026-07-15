@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import os from 'os';
 import { PlatformRepository as R } from './platform.repository';
 import * as T from './platform.types';
-import { query } from '../../db';
+import { query, run } from '../../db';
 
 function now(): string {
   return new Date().toISOString();
@@ -695,5 +695,390 @@ export const DisasterRecoveryService = {
     const fn = recoveries[scenario];
     if (!fn) throw new Error(`Unknown recovery scenario: ${scenario}`);
     return fn();
+  },
+};
+
+// ═════════════════════════════════════════════════════════════════════════
+// SLO SERVICE (P13-8 Observability)
+// ═════════════════════════════════════════════════════════════════════════
+
+export const SloService = {
+  async recordSloViolation(
+    tenantId: string,
+    sloName: string,
+    violationType: string,
+  ): Promise<void> {
+    const { recordSloViolation: recordMetric } = await import(
+      '../../middleware/metrics'
+    );
+    try {
+      await run(
+        `INSERT INTO monitoring_metrics (id, metric_name, metric_value, metric_unit, labels, recorded_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          `slo-v-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+          `slo.violation.${sloName}`,
+          1,
+          'count',
+          JSON.stringify({ tenantId, sloName, violationType }),
+          new Date().toISOString(),
+        ],
+      );
+      recordMetric(tenantId, sloName, violationType);
+    } catch (err: any) {
+      console.error('[SloService] Failed to record SLO violation:', err.message);
+    }
+  },
+
+  async getSloStatus(
+    tenantId: string,
+  ): Promise<{
+    tenantId: string;
+    availability: number;
+    avgLatencyMs: number;
+    errorRate: number;
+    violations24h: number;
+    status: string;
+  }> {
+    const windowStart = new Date(
+      Date.now() - 24 * 60 * 60 * 1000,
+    ).toISOString();
+    try {
+      const rows = await query(
+        `SELECT COUNT(*) as total,
+                COALESCE(AVG(duration_ms), 0) as avg_dur,
+                SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END) as errs
+         FROM request_metrics
+         WHERE recorded_at >= ? AND request_id LIKE ?`,
+        [windowStart, `%tenant:${tenantId}%`],
+      );
+      const total = Number(rows[0]?.total || 0);
+      const errs = Number(rows[0]?.errs || 0);
+      const avgLatencyMs = Number(rows[0]?.avg_dur || 0);
+      const errorRate = total > 0 ? errs / total : 0;
+      const availability = total > 0 ? (total - errs) / total : 1;
+
+      const viol = await query(
+        `SELECT COUNT(*) as cnt FROM monitoring_metrics
+         WHERE metric_name LIKE 'slo.violation.%' AND recorded_at >= ? AND labels LIKE ?`,
+        [windowStart, `%"tenantId":"${tenantId}"%`],
+      );
+      const violations24h = Number(viol[0]?.cnt || 0);
+
+      let status = 'healthy';
+      if (violations24h > 0) status = 'degraded';
+      if (availability < 0.99) status = 'critical';
+
+      return { tenantId, availability, avgLatencyMs, errorRate, violations24h, status };
+    } catch {
+      return {
+        tenantId,
+        availability: 1,
+        avgLatencyMs: 0,
+        errorRate: 0,
+        violations24h: 0,
+        status: 'unknown',
+      };
+    }
+  },
+
+  async getErrorBudget(
+    tenantId: string,
+    targetAvailability = 0.995,
+  ): Promise<{
+    tenantId: string;
+    targetAvailability: number;
+    actualAvailability: number;
+    budgetRemaining: number;
+    totalAllowedErrors: number;
+    totalErrors: number;
+    budgetPercentage: number;
+  }> {
+    const windowStart = new Date(
+      Date.now() - 30 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    try {
+      const rows = await query(
+        `SELECT COUNT(*) as total,
+                SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END) as errs
+         FROM request_metrics
+         WHERE recorded_at >= ? AND request_id LIKE ?`,
+        [windowStart, `%tenant:${tenantId}%`],
+      );
+      const total = Number(rows[0]?.total || 0);
+      const totalErrors = Number(rows[0]?.errs || 0);
+      const actualAvailability = total > 0 ? (total - totalErrors) / total : 1;
+      const totalAllowedErrors = Math.max(0, Math.floor(total * (1 - targetAvailability)));
+      const budgetRemaining = Math.max(0, totalAllowedErrors - totalErrors);
+      const budgetPercentage =
+        totalAllowedErrors > 0
+          ? Math.round((budgetRemaining / totalAllowedErrors) * 100)
+          : totalErrors === 0
+            ? 100
+            : 0;
+
+      return {
+        tenantId,
+        targetAvailability,
+        actualAvailability,
+        budgetRemaining,
+        totalAllowedErrors,
+        totalErrors,
+        budgetPercentage,
+      };
+    } catch {
+      return {
+        tenantId,
+        targetAvailability,
+        actualAvailability: 1,
+        budgetRemaining: 0,
+        totalAllowedErrors: 0,
+        totalErrors: 0,
+        budgetPercentage: 100,
+      };
+    }
+  },
+
+  async getSloReport(
+    from: string,
+    to: string,
+  ): Promise<{
+    from: string;
+    to: string;
+    totalRequests: number;
+    totalErrors: number;
+    overallAvailability: number;
+    avgLatencyMs: number;
+    violations: { sloName: string; count: number }[];
+    tenantReports: { tenantId: string; availability: number; violations: number }[];
+  }> {
+    try {
+      const rows = await query(
+        `SELECT COUNT(*) as total,
+                COALESCE(AVG(duration_ms), 0) as avg_dur,
+                SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END) as errs
+         FROM request_metrics
+         WHERE recorded_at >= ? AND recorded_at <= ?`,
+        [from, to],
+      );
+      const total = Number(rows[0]?.total || 0);
+      const errs = Number(rows[0]?.errs || 0);
+      const overallAvailability = total > 0 ? (total - errs) / total : 1;
+      const avgLatencyMs = Number(rows[0]?.avg_dur || 0);
+
+      const violations = await query(
+        `SELECT metric_name, SUM(metric_value) as count
+         FROM monitoring_metrics
+         WHERE metric_name LIKE 'slo.violation.%' AND recorded_at >= ? AND recorded_at <= ?
+         GROUP BY metric_name`,
+        [from, to],
+      );
+
+      const tenantBreakdown = await query(
+        `SELECT
+           SUBSTR(request_id, INSTR(request_id, 'tenant:') + 7) as tenant_id,
+           COUNT(*) as total,
+           SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END) as errs
+         FROM request_metrics
+         WHERE recorded_at >= ? AND recorded_at <= ? AND request_id LIKE 'tenant:%'
+         GROUP BY tenant_id`,
+        [from, to],
+      );
+
+      return {
+        from,
+        to,
+        totalRequests: total,
+        totalErrors: errs,
+        overallAvailability,
+        avgLatencyMs,
+        violations: violations.map((v: any) => ({
+          sloName: v.metric_name.replace('slo.violation.', ''),
+          count: Number(v.count),
+        })),
+        tenantReports: tenantBreakdown.map((t: any) => ({
+          tenantId: t.tenant_id,
+          availability:
+            Number(t.total) > 0
+              ? (Number(t.total) - Number(t.errs)) / Number(t.total)
+              : 1,
+          violations: Number(t.errs),
+        })),
+      };
+    } catch {
+      return {
+        from,
+        to,
+        totalRequests: 0,
+        totalErrors: 0,
+        overallAvailability: 1,
+        avgLatencyMs: 0,
+        violations: [],
+        tenantReports: [],
+      };
+    }
+  },
+
+  async getTenantDashboard(tenantId: string): Promise<{
+    tenantId: string;
+    slo: any;
+    errorBudget: any;
+    recentRequests: number;
+    avgLatency: number;
+    errorRate: number;
+    activeAlerts: number;
+    slowQueries24h: number;
+  }> {
+    const [slo, errorBudget, requests, alerts, slow] = await Promise.all([
+      this.getSloStatus(tenantId),
+      this.getErrorBudget(tenantId),
+      query(
+        `SELECT COUNT(*) as cnt, COALESCE(AVG(duration_ms), 0) as avg_dur,
+                SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END) as errs
+         FROM request_metrics
+         WHERE recorded_at >= ? AND request_id LIKE ?`,
+        [
+          new Date(Date.now() - 3600000).toISOString(),
+          `%tenant:${tenantId}%`,
+        ],
+      ),
+      query(
+        `SELECT COUNT(*) as cnt FROM alerts
+         WHERE status = 'open' AND (metadata LIKE ? OR metadata LIKE ?)`,
+        [`%"tenantId":"${tenantId}"%`, `%"tenant_id":"${tenantId}"%`],
+      ),
+      query(
+        `SELECT COUNT(*) as cnt FROM slow_query_log
+         WHERE recorded_at >= ? AND source LIKE ?`,
+        [
+          new Date(Date.now() - 86400000).toISOString(),
+          `%tenant:${tenantId}%`,
+        ],
+      ),
+    ]);
+
+    return {
+      tenantId,
+      slo,
+      errorBudget,
+      recentRequests: Number(requests[0]?.cnt || 0),
+      avgLatency: Number(requests[0]?.avg_dur || 0),
+      errorRate:
+        Number(requests[0]?.cnt || 0) > 0
+          ? Number(requests[0]?.errs || 0) / Number(requests[0]?.cnt || 0)
+          : 0,
+      activeAlerts: Number(alerts[0]?.cnt || 0),
+      slowQueries24h: Number(slow[0]?.cnt || 0),
+    };
+  },
+
+  async getAuditTimeline(
+    tenantId: string,
+    from: string,
+    to: string,
+  ): Promise<
+    {
+      id: string;
+      timestamp: string;
+      userId: string;
+      action: string;
+      details: string;
+    }[]
+  > {
+    try {
+      const rows = await query(
+        `SELECT * FROM security_audit_log
+         WHERE date >= ? AND date <= ?
+         ORDER BY date DESC
+         LIMIT 200`,
+        [from, to],
+      );
+      return (rows as any[]).map((r) => ({
+        id: r.id,
+        timestamp: r.date,
+        userId: r.user_id,
+        action: r.action,
+        details: r.ip_address || '',
+      }));
+    } catch {
+      return [];
+    }
+  },
+
+  async getPlatformSLO(): Promise<{
+    overallAvailability: number;
+    avgLatencyMs: number;
+    totalTenants: number;
+    healthyTenants: number;
+    degradedTenants: number;
+    criticalTenants: number;
+    totalViolations24h: number;
+  }> {
+    const windowStart = new Date(
+      Date.now() - 24 * 60 * 60 * 1000,
+    ).toISOString();
+    try {
+      const allSlas = await query(
+        `SELECT
+           SUBSTR(request_id, INSTR(request_id, 'tenant:') + 7) as tenant_id,
+           COUNT(*) as total,
+           SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END) as errs
+         FROM request_metrics
+         WHERE recorded_at >= ? AND request_id LIKE 'tenant:%'
+         GROUP BY tenant_id`,
+        [windowStart],
+      );
+
+      const violations = await query(
+        `SELECT COUNT(*) as cnt FROM monitoring_metrics
+         WHERE metric_name LIKE 'slo.violation.%' AND recorded_at >= ?`,
+        [windowStart],
+      );
+
+      const global = await query(
+        `SELECT COUNT(*) as total,
+                COALESCE(AVG(duration_ms), 0) as avg_dur,
+                SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END) as errs
+         FROM request_metrics WHERE recorded_at >= ?`,
+        [windowStart],
+      );
+
+      const totalTenants = allSlas.length;
+      let healthyTenants = 0;
+      let degradedTenants = 0;
+      let criticalTenants = 0;
+      for (const t of allSlas) {
+        const total = Number(t.total);
+        const errs = Number(t.errs);
+        const avail = total > 0 ? (total - errs) / total : 1;
+        if (avail >= 0.995) healthyTenants++;
+        else if (avail >= 0.99) degradedTenants++;
+        else criticalTenants++;
+      }
+
+      const globalTotal = Number(global[0]?.total || 0);
+      const globalErrs = Number(global[0]?.errs || 0);
+
+      return {
+        overallAvailability:
+          globalTotal > 0 ? (globalTotal - globalErrs) / globalTotal : 1,
+        avgLatencyMs: Number(global[0]?.avg_dur || 0),
+        totalTenants,
+        healthyTenants,
+        degradedTenants,
+        criticalTenants,
+        totalViolations24h: Number(violations[0]?.cnt || 0),
+      };
+    } catch {
+      return {
+        overallAvailability: 1,
+        avgLatencyMs: 0,
+        totalTenants: 0,
+        healthyTenants: 0,
+        degradedTenants: 0,
+        criticalTenants: 0,
+        totalViolations24h: 0,
+      };
+    }
   },
 };

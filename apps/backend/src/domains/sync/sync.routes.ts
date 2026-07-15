@@ -24,6 +24,10 @@ function handleError(
   res.status(status).json({ message: err.message || msg });
 }
 
+function getTenantId(req: AuthenticatedRequest): string {
+  return req.user?.tenantId || '';
+}
+
 // ── Device Registration & Management ─────────────────────────────────────
 
 router.post(
@@ -311,7 +315,322 @@ router.post('/sync', async (req: AuthenticatedRequest, res: Response) => {
   }
 });
 
-router.get('/status', async (req: AuthenticatedRequest, res: Response) => {
+// ── Tenant-Isolated Sync ─────────────────────────────────────────────────
+
+router.post(
+  '/push',
+  authenticate,
+  authorize('owner', 'manager', 'accountant', 'cashier', 'fnb', 'barstaff', 'kitchen', 'inventory', 'reception'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const tenantId = getTenantId(req);
+      if (!tenantId) {
+        res.status(400).json({ message: 'Tenant context required' });
+        return;
+      }
+      const { events, lastCheckpoint, deviceId } = req.body;
+      if (!deviceId) {
+        res.status(400).json({ message: 'deviceId is required' });
+        return;
+      }
+      if (!events || !Array.isArray(events)) {
+        res.status(400).json({ message: 'events array is required' });
+        return;
+      }
+      const result = await S.pushWithTenantIsolation(
+        tenantId,
+        deviceId,
+        events,
+        lastCheckpoint,
+      );
+      res.json(result);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+router.post(
+  '/pull',
+  authenticate,
+  authorize('owner', 'manager', 'accountant', 'cashier', 'fnb', 'barstaff', 'kitchen', 'inventory', 'reception'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const tenantId = getTenantId(req);
+      if (!tenantId) {
+        res.status(400).json({ message: 'Tenant context required' });
+        return;
+      }
+      const { sinceVersion, deviceId, limit } = req.body;
+      if (!deviceId) {
+        res.status(400).json({ message: 'deviceId is required' });
+        return;
+      }
+      const result = await S.pullWithTenantIsolation(
+        tenantId,
+        deviceId,
+        sinceVersion ? parseInt(sinceVersion, 10) : undefined,
+        limit ? Math.min(parseInt(limit, 10), 10000) : 1000,
+      );
+      res.json(result);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+// ── Compression ──────────────────────────────────────────────────────────
+
+router.post(
+  '/compress',
+  authenticate,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { events, algorithm } = req.body;
+      if (!events || !Array.isArray(events)) {
+        res.status(400).json({ message: 'events array is required' });
+        return;
+      }
+      const algo: T.CompressionAlgorithm =
+        algorithm === 'brotli' ? 'brotli' : 'gzip';
+      const compressed = await S.compressEvents(events, algo);
+      res.json(compressed);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+router.post(
+  '/decompress',
+  authenticate,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const payload = req.body as T.CompressedSyncPayload;
+      if (!payload || !payload.algorithm || !payload.compressed) {
+        res.status(400).json({ message: 'Compressed payload is required' });
+        return;
+      }
+      const events = await S.decompressEvents(payload);
+      res.json(events);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+// ── Snapshots ────────────────────────────────────────────────────────────
+
+router.post(
+  '/snapshot',
+  authenticate,
+  authorize('owner', 'manager'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const tenantId = getTenantId(req);
+      if (!tenantId) {
+        res.status(400).json({ message: 'Tenant context required' });
+        return;
+      }
+      const dto: T.CreateSnapshotDto = {
+        tenantId,
+        label: req.body.label,
+        tags: req.body.tags,
+        ttlMs: req.body.ttlMs,
+      };
+      const snapshot = await S.createSnapshot(
+        tenantId,
+        dto,
+        req.user?.name || 'unknown',
+      );
+      res.status(201).json(snapshot);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+router.get(
+  '/snapshot',
+  authenticate,
+  authorize('owner', 'manager'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const tenantId = getTenantId(req);
+      if (!tenantId) {
+        res.status(400).json({ message: 'Tenant context required' });
+        return;
+      }
+      const limit = parseInt((req.query.limit as string) || '20', 10);
+      const snapshots = await S.listSnapshots(tenantId, limit);
+      res.json(snapshots);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+router.get(
+  '/snapshot/:id',
+  authenticate,
+  authorize('owner', 'manager'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const snapshot = await S.getSnapshot(req.params.id);
+      if (!snapshot) {
+        res.status(404).json({ message: 'Snapshot not found' });
+        return;
+      }
+      res.json(snapshot);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+router.post(
+  '/snapshot/:id/restore',
+  authenticate,
+  authorize('owner'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const tenantId = getTenantId(req);
+      if (!tenantId) {
+        res.status(400).json({ message: 'Tenant context required' });
+        return;
+      }
+      const result = await S.restoreFromSnapshot(tenantId, req.params.id);
+      res.json(result);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+// ── Incremental Sync ─────────────────────────────────────────────────────
+
+router.post(
+  '/incremental',
+  authenticate,
+  authorize('owner', 'manager', 'accountant', 'cashier', 'fnb', 'barstaff', 'kitchen', 'inventory', 'reception'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const tenantId = getTenantId(req);
+      if (!tenantId) {
+        res.status(400).json({ message: 'Tenant context required' });
+        return;
+      }
+      const { deviceId, lastSyncAt } = req.body;
+      if (!deviceId) {
+        res.status(400).json({ message: 'deviceId is required' });
+        return;
+      }
+      const result = await S.incrementalSync(
+        tenantId,
+        deviceId,
+        lastSyncAt || '0',
+      );
+      res.json(result);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+// ── Replay ───────────────────────────────────────────────────────────────
+
+router.post(
+  '/replay',
+  authenticate,
+  authorize('owner', 'manager', 'accountant'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const tenantId = getTenantId(req);
+      if (!tenantId) {
+        res.status(400).json({ message: 'Tenant context required' });
+        return;
+      }
+      const dto: T.CreateReplayDto = {
+        tenantId,
+        aggregateId: req.body.aggregateId,
+        aggregateType: req.body.aggregateType,
+        fromVersion: req.body.fromVersion || 0,
+        toVersion: req.body.toVersion || null,
+      };
+      const session = await S.createReplaySession(
+        tenantId,
+        dto,
+        req.user?.name || 'unknown',
+      );
+      res.status(201).json(session);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+router.get(
+  '/replay',
+  authenticate,
+  authorize('owner', 'manager', 'accountant'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const tenantId = getTenantId(req);
+      if (!tenantId) {
+        res.status(400).json({ message: 'Tenant context required' });
+        return;
+      }
+      const limit = parseInt((req.query.limit as string) || '20', 10);
+      const sessions = await S.listReplaySessions(tenantId, limit);
+      res.json(sessions);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+router.get(
+  '/replay/:id',
+  authenticate,
+  authorize('owner', 'manager', 'accountant'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const tenantId = getTenantId(req);
+      if (!tenantId) {
+        res.status(400).json({ message: 'Tenant context required' });
+        return;
+      }
+      const result = await S.validateReplay(tenantId, req.params.id);
+      res.json(result);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+// ── Sync Status ──────────────────────────────────────────────────────────
+
+router.get(
+  '/status',
+  authenticate,
+  authorize('owner', 'manager'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const tenantId = getTenantId(req);
+      if (!tenantId) {
+        res.status(400).json({ message: 'Tenant context required' });
+        return;
+      }
+      const status = await S.getSyncStatus(tenantId);
+      res.json(status);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+// Legacy device-level status (kept for backward compatibility)
+router.get('/device-status', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const deviceId = req.query.deviceId as string;
     const token = req.query.token as string;
@@ -337,6 +656,66 @@ router.get('/status', async (req: AuthenticatedRequest, res: Response) => {
     handleError(res, err);
   }
 });
+
+// ── Background Sync ──────────────────────────────────────────────────────
+
+router.post(
+  '/schedule',
+  authenticate,
+  authorize('owner', 'manager'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const tenantId = getTenantId(req);
+      if (!tenantId) {
+        res.status(400).json({ message: 'Tenant context required' });
+        return;
+      }
+      const { deviceId, syncType, priority } = req.body;
+      const task = await S.scheduleBackgroundSync(
+        tenantId,
+        deviceId,
+        syncType || 'incremental',
+        priority || 0,
+      );
+      res.status(201).json(task);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+router.post(
+  '/background/process',
+  authenticate,
+  authorize('owner', 'superadmin'),
+  async (_req: AuthenticatedRequest, res: Response) => {
+    try {
+      const result = await S.processBackgroundSync();
+      res.json(result);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+router.get(
+  '/background/tasks',
+  authenticate,
+  authorize('owner', 'manager'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const tenantId = getTenantId(req) || undefined;
+      const limit = parseInt((req.query.limit as string) || '20', 10);
+      const tasks = await S.listBackgroundTasks(
+        tenantId || undefined,
+        limit,
+      );
+      res.json(tasks);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
 
 // ── Conflict Management ─────────────────────────────────────────────────
 
@@ -378,10 +757,10 @@ router.post(
   },
 );
 
-// ── Replay ───────────────────────────────────────────────────────────────
+// ── Replay (legacy) ──────────────────────────────────────────────────────
 
 router.post(
-  '/replay',
+  '/replay-legacy',
   authenticate,
   authorize('owner', 'manager', 'accountant'),
   async (req: AuthenticatedRequest, res: Response) => {

@@ -14,6 +14,7 @@ import {
   OpsDashboardService as O,
   DisasterRecoveryService as DR,
 } from './platform.service';
+import { TenantService as TS } from './tenant.service';
 import * as T from './platform.types';
 
 const router = Router();
@@ -356,17 +357,27 @@ router.get(
 );
 
 router.get(
-  '/backups/:id',
+  '/backups/config',
   authenticate,
   authorize('owner'),
-  async (req: AuthenticatedRequest, res: Response) => {
+  async (_req: AuthenticatedRequest, res: Response) => {
     try {
-      const backup = await B.getBackup(req.params.id);
-      if (!backup) {
-        res.status(404).json({ message: 'Backup not found' });
-        return;
-      }
-      res.json(backup);
+      const config = await B.getBackupScheduleConfig();
+      res.json(config);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+router.post(
+  '/backups/cleanup',
+  authenticate,
+  authorize('owner'),
+  async (_req: AuthenticatedRequest, res: Response) => {
+    try {
+      const cleaned = await B.cleanupOldBackups();
+      res.json({ message: `Cleaned up ${cleaned} expired backups` });
     } catch (err: any) {
       handleError(res, err);
     }
@@ -395,6 +406,24 @@ router.post(
   },
 );
 
+router.get(
+  '/backups/:id',
+  authenticate,
+  authorize('owner'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const backup = await B.getBackup(req.params.id);
+      if (!backup) {
+        res.status(404).json({ message: 'Backup not found' });
+        return;
+      }
+      res.json(backup);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
 router.post(
   '/backups/:id/verify',
   authenticate,
@@ -403,34 +432,6 @@ router.post(
     try {
       const valid = await B.verifyBackup(req.params.id);
       res.json({ verified: valid, id: req.params.id });
-    } catch (err: any) {
-      handleError(res, err);
-    }
-  },
-);
-
-router.get(
-  '/backups/config',
-  authenticate,
-  authorize('owner'),
-  async (_req: AuthenticatedRequest, res: Response) => {
-    try {
-      const config = await B.getBackupScheduleConfig();
-      res.json(config);
-    } catch (err: any) {
-      handleError(res, err);
-    }
-  },
-);
-
-router.post(
-  '/backups/cleanup',
-  authenticate,
-  authorize('owner'),
-  async (_req: AuthenticatedRequest, res: Response) => {
-    try {
-      const cleaned = await B.cleanupOldBackups();
-      res.json({ message: `Cleaned up ${cleaned} expired backups` });
     } catch (err: any) {
       handleError(res, err);
     }
@@ -647,6 +648,244 @@ router.get(
         tableCount,
         sizeMB: (size / 1024 / 1024).toFixed(2),
       });
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+// ═════════════════════════════════════════════════════════════════════════
+// TENANT CONTROL PLANE (P13-1)
+// ═════════════════════════════════════════════════════════════════════════
+
+/** Create / provision a new tenant */
+router.post(
+  '/tenants',
+  authenticate,
+  authorize('superadmin', 'owner'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const dto: T.CreateTenantDto = {
+        name: req.body.name,
+        slug: req.body.slug,
+        plan: req.body.plan,
+        contactEmail: req.body.contactEmail,
+        contactName: req.body.contactName,
+        domain: req.body.domain,
+        locale: req.body.locale,
+        timezone: req.body.timezone,
+        maxRooms: req.body.maxRooms,
+        maxUsers: req.body.maxUsers,
+        branding: req.body.branding,
+        features: req.body.features,
+        metadata: req.body.metadata,
+      };
+      if (!dto.name || !dto.slug || !dto.plan) {
+        res.status(400).json({ message: 'name, slug, and plan are required' });
+        return;
+      }
+      const tenant = await TS.createTenant(dto);
+      res.status(201).json(tenant);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+/** List tenants with optional filtering and pagination */
+router.get(
+  '/tenants',
+  authenticate,
+  authorize('superadmin', 'owner', 'manager'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const filter: T.TenantListFilter = {
+        status: req.query.status as T.TenantLifecycleState,
+        plan: req.query.plan as T.TenantPlan,
+        search: req.query.search as string,
+        offset: parseInt((req.query.offset as string) || '0', 10),
+        limit: parseInt((req.query.limit as string) || '50', 10),
+        orderBy: (req.query.orderBy as string) || 'created_at',
+        orderDir: (req.query.orderDir as 'asc' | 'desc') || 'desc',
+      };
+      const result = await TS.listTenants(filter);
+      res.json(result);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+/** Get tenant summary (aggregate counts by status / plan) */
+router.get(
+  '/tenants/summary',
+  authenticate,
+  authorize('superadmin', 'owner'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const summary = await TS.getTenantSummary();
+      res.json(summary);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+/** Get a single tenant by ID */
+router.get(
+  '/tenants/:id',
+  authenticate,
+  authorize('superadmin', 'owner', 'manager'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const tenant = await TS.getTenant(req.params.id);
+      if (!tenant) {
+        res.status(404).json({ message: 'Tenant not found' });
+        return;
+      }
+      res.json(tenant);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+/** Update a tenant */
+router.patch(
+  '/tenants/:id',
+  authenticate,
+  authorize('superadmin', 'owner'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const dto: T.UpdateTenantDto = {
+        name: req.body.name,
+        slug: req.body.slug,
+        contactEmail: req.body.contactEmail,
+        contactName: req.body.contactName,
+        domain: req.body.domain,
+        locale: req.body.locale,
+        timezone: req.body.timezone,
+        maxRooms: req.body.maxRooms,
+        maxUsers: req.body.maxUsers,
+        metadata: req.body.metadata,
+      };
+      const tenant = await TS.updateTenant(req.params.id, dto);
+      res.json(tenant);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+/** Update tenant branding */
+router.patch(
+  '/tenants/:id/branding',
+  authenticate,
+  authorize('superadmin', 'owner'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const branding = req.body;
+      if (!branding || Object.keys(branding).length === 0) {
+        res.status(400).json({ message: 'Branding configuration is required' });
+        return;
+      }
+      const tenant = await TS.updateTenantBranding(req.params.id, branding);
+      res.json(tenant);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+/** Upgrade tenant plan */
+router.post(
+  '/tenants/:id/upgrade',
+  authenticate,
+  authorize('superadmin', 'owner'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { plan } = req.body;
+      if (!plan) {
+        res.status(400).json({ message: 'plan is required' });
+        return;
+      }
+      const tenant = await TS.updateTenantPlan(req.params.id, plan);
+      res.json(tenant);
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+/** Suspend a tenant */
+router.post(
+  '/tenants/:id/suspend',
+  authenticate,
+  authorize('superadmin', 'owner'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const tenant = await TS.suspendTenant(req.params.id);
+      res.json({ message: 'Tenant suspended', tenant });
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+/** Activate a tenant */
+router.post(
+  '/tenants/:id/activate',
+  authenticate,
+  authorize('superadmin', 'owner'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const tenant = await TS.activateTenant(req.params.id);
+      res.json({ message: 'Tenant activated', tenant });
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+/** Archive a tenant */
+router.post(
+  '/tenants/:id/archive',
+  authenticate,
+  authorize('superadmin', 'owner'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const tenant = await TS.archiveTenant(req.params.id);
+      res.json({ message: 'Tenant archived', tenant });
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+/** Delete a tenant permanently */
+router.post(
+  '/tenants/:id/delete',
+  authenticate,
+  authorize('superadmin', 'owner'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      await TS.deleteTenant(req.params.id);
+      res.json({ message: 'Tenant deleted' });
+    } catch (err: any) {
+      handleError(res, err);
+    }
+  },
+);
+
+/** Get tenant quota summary */
+router.get(
+  '/tenants/:id/quota',
+  authenticate,
+  authorize('superadmin', 'owner', 'manager'),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const quota = await TS.getQuotaSummary(req.params.id);
+      res.json(quota);
     } catch (err: any) {
       handleError(res, err);
     }

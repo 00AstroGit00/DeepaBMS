@@ -586,4 +586,233 @@ export const PlatformRepository = {
       storage: { dbSize, backupSize },
     };
   },
+
+  // ═════════════════════════════════════════════════════════════════════
+  // TENANT OPERATIONS (P13-1)
+  // ═════════════════════════════════════════════════════════════════════
+
+  async ensureTenantTableColumns(): Promise<void> {
+    const migrations: string[] = [
+      `ALTER TABLE tenants ADD COLUMN slug VARCHAR(200) DEFAULT ''`,
+      `ALTER TABLE tenants ADD COLUMN contact_email VARCHAR(200) DEFAULT NULL`,
+      `ALTER TABLE tenants ADD COLUMN contact_name VARCHAR(200) DEFAULT NULL`,
+      `ALTER TABLE tenants ADD COLUMN domain VARCHAR(200) DEFAULT NULL`,
+      `ALTER TABLE tenants ADD COLUMN locale VARCHAR(10) DEFAULT 'en'`,
+      `ALTER TABLE tenants ADD COLUMN timezone VARCHAR(50) DEFAULT 'UTC'`,
+      `ALTER TABLE tenants ADD COLUMN features TEXT DEFAULT NULL`,
+      `ALTER TABLE tenants ADD COLUMN metadata TEXT DEFAULT NULL`,
+      `ALTER TABLE tenants ADD COLUMN subscription_ends_at TIMESTAMP DEFAULT NULL`,
+    ];
+    for (const sql of migrations) {
+      try {
+        await run(sql);
+      } catch {
+        /* column already exists — swallow */
+      }
+    }
+  },
+
+  async createTenant(dto: T.CreateTenantDto): Promise<T.Tenant> {
+    const id = uid('tnt');
+    await this.ensureTenantTableColumns();
+    const branding = dto.branding ? JSON.stringify(dto.branding) : null;
+    const features = dto.features ? JSON.stringify(dto.features) : null;
+    const metadata = dto.metadata ? JSON.stringify(dto.metadata) : null;
+    const maxRooms = dto.maxRooms ?? 15;
+    const maxUsers = dto.maxUsers ?? 5;
+    await run(
+      `INSERT INTO tenants (id, name, slug, plan, status, branding, max_rooms, max_users, contact_email, contact_name, domain, locale, timezone, features, metadata, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        dto.name,
+        dto.slug,
+        dto.plan,
+        'trial',
+        branding,
+        maxRooms,
+        maxUsers,
+        dto.contactEmail || null,
+        dto.contactName || null,
+        dto.domain || null,
+        dto.locale || 'en',
+        dto.timezone || 'UTC',
+        features,
+        metadata,
+        now(),
+        now(),
+      ],
+    );
+    return this.findTenantById(id) as Promise<T.Tenant>;
+  },
+
+  async findTenantById(id: string): Promise<T.Tenant | null> {
+    const rows = await query('SELECT * FROM tenants WHERE id = ?', [id]);
+    if (rows.length === 0) return null;
+    return this.mapTenant(rows[0]);
+  },
+
+  async findTenantBySlug(slug: string): Promise<T.Tenant | null> {
+    const rows = await query('SELECT * FROM tenants WHERE slug = ?', [slug]);
+    if (rows.length === 0) return null;
+    return this.mapTenant(rows[0]);
+  },
+
+  async findAllTenants(
+    filter?: T.TenantListFilter,
+  ): Promise<T.PaginatedResult<T.Tenant>> {
+    const conditions: string[] = [];
+    const params: any[] = [];
+    if (filter?.status) {
+      conditions.push('status = ?');
+      params.push(filter.status);
+    }
+    if (filter?.plan) {
+      conditions.push('plan = ?');
+      params.push(filter.plan);
+    }
+    if (filter?.search) {
+      conditions.push('(name LIKE ? OR slug LIKE ? OR contact_email LIKE ?)');
+      const pattern = `%${filter.search}%`;
+      params.push(pattern, pattern, pattern);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const offset = filter?.offset || 0;
+    const limit = filter?.limit || 50;
+    const orderBy = filter?.orderBy || 'created_at';
+    const orderDir = filter?.orderDir === 'asc' ? 'ASC' : 'DESC';
+    const countResult = await query(
+      `SELECT COUNT(*) as total FROM tenants ${where}`,
+      params,
+    );
+    const total = countResult[0]?.total || 0;
+    const rows = await query(
+      `SELECT * FROM tenants ${where} ORDER BY ${orderBy} ${orderDir} LIMIT ? OFFSET ?`,
+      [...params, limit, offset],
+    );
+    return {
+      data: rows.map((r: any) => this.mapTenant(r)),
+      total,
+      offset,
+      limit,
+    };
+  },
+
+  async updateTenant(
+    id: string,
+    updates: Partial<Omit<T.Tenant, 'id' | 'createdAt' | 'updatedAt'>>,
+  ): Promise<void> {
+    const timestamp = now();
+    const sets: string[] = [];
+    const params: any[] = [];
+    const fieldMap: Record<string, string> = {
+      name: 'name',
+      slug: 'slug',
+      plan: 'plan',
+      status: 'status',
+      maxRooms: 'max_rooms',
+      maxUsers: 'max_users',
+      contactEmail: 'contact_email',
+      contactName: 'contact_name',
+      domain: 'domain',
+      locale: 'locale',
+      timezone: 'timezone',
+      subscriptionEndsAt: 'subscription_ends_at',
+    };
+    for (const [key, val] of Object.entries(updates)) {
+      if (key === 'branding' && val !== undefined) {
+        sets.push('branding = ?');
+        params.push(JSON.stringify(val));
+        continue;
+      }
+      if (key === 'features' && val !== undefined) {
+        sets.push('features = ?');
+        params.push(JSON.stringify(val));
+        continue;
+      }
+      if (key === 'metadata' && val !== undefined) {
+        sets.push('metadata = ?');
+        params.push(JSON.stringify(val));
+        continue;
+      }
+      const dbKey = fieldMap[key];
+      if (dbKey && val !== undefined) {
+        sets.push(`${dbKey} = ?`);
+        params.push(val === null ? null : val);
+      }
+    }
+    if (sets.length === 0) return;
+    sets.push('updated_at = ?');
+    params.push(timestamp);
+    params.push(id);
+    await run(`UPDATE tenants SET ${sets.join(', ')} WHERE id = ?`, params);
+  },
+
+  async deleteTenant(id: string): Promise<void> {
+    await run('DELETE FROM tenants WHERE id = ?', [id]);
+  },
+
+  async getTenantCount(filter?: {
+    status?: T.TenantLifecycleState;
+  }): Promise<number> {
+    const conditions: string[] = [];
+    const params: any[] = [];
+    if (filter?.status) {
+      conditions.push('status = ?');
+      params.push(filter.status);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const rows = await query(
+      `SELECT COUNT(*) as count FROM tenants ${where}`,
+      params,
+    );
+    return rows[0]?.count || 0;
+  },
+
+  mapTenant(row: any): T.Tenant {
+    let branding: T.TenantBranding | null = null;
+    if (row.branding) {
+      try {
+        branding = JSON.parse(row.branding);
+      } catch {
+        branding = null;
+      }
+    }
+    let features: string[] | null = null;
+    if (row.features) {
+      try {
+        features = JSON.parse(row.features);
+      } catch {
+        features = null;
+      }
+    }
+    let metadata: Record<string, any> | null = null;
+    if (row.metadata) {
+      try {
+        metadata = JSON.parse(row.metadata);
+      } catch {
+        metadata = null;
+      }
+    }
+    return {
+      id: row.id,
+      name: row.name,
+      slug: row.slug || '',
+      plan: row.plan,
+      status: row.status,
+      branding,
+      maxRooms: row.max_rooms,
+      maxUsers: row.max_users,
+      contactEmail: row.contact_email || null,
+      contactName: row.contact_name || null,
+      domain: row.domain || null,
+      locale: row.locale || 'en',
+      timezone: row.timezone || 'UTC',
+      features,
+      metadata,
+      subscriptionEndsAt: row.subscription_ends_at || null,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  },
 };

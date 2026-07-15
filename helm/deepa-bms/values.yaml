@@ -28,12 +28,14 @@ config:
   logLevel: info
   metricsEnabled: true
   corsOrigins: "https://bms.example.com"
+  # ^ FIXME: Replace with actual production domain before deployment
   trustProxy: true
 
 # -- Secrets reference --
 secrets:
   # existingSecret: deepa-bms-secrets
   jwtSecret: "CHANGE_ME_JWT_SECRET"
+  # ^ FIXME: Replace with a strong random secret (min 32 chars) before deployment
   jwtIssuer: deepa-bms
   jwtAudience: deepa-bms-clients
 

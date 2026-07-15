@@ -58,6 +58,18 @@ export type SyncDirection = 'push' | 'pull' | 'bidirectional';
 export type SyncSessionStatus =
   'started' | 'completed' | 'failed' | 'cancelled' | 'timeout';
 
+export type CompressionAlgorithm = 'gzip' | 'brotli';
+
+export type ReplayStatus =
+  'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
+
+export type BgSyncTaskStatus =
+  | 'queued'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
 export interface DeviceRegistration {
   id: string;
   name: string;
@@ -218,6 +230,99 @@ export interface SyncPullResponse {
   checkpoint: string;
   hasMore: boolean;
   serverVersion: number;
+}
+
+export interface CompressedSyncPayload {
+  algorithm: CompressionAlgorithm;
+  compressed: Buffer | string;
+  originalSize: number;
+  compressedSize: number;
+  checksum: string;
+}
+
+export interface Snapshot {
+  id: string;
+  tenantId: string;
+  label: string | null;
+  state: Record<string, any>;
+  eventVersion: number;
+  eventCount: number;
+  compressedSize: number | null;
+  checksum: string | null;
+  tags: string[];
+  createdBy: string;
+  createdAt: string;
+  expiresAt: string | null;
+  restoredAt: string | null;
+}
+
+export interface CreateSnapshotDto {
+  tenantId: string;
+  label?: string;
+  tags?: string[];
+  ttlMs?: number;
+}
+
+export interface ReplaySession {
+  id: string;
+  tenantId: string;
+  aggregateId: string | null;
+  aggregateType: string | null;
+  fromVersion: number;
+  toVersion: number | null;
+  eventsCount: number;
+  status: ReplayStatus;
+  checksum: string | null;
+  integrity: boolean | null;
+  errorMessage: string | null;
+  startedAt: string;
+  completedAt: string | null;
+  createdBy: string;
+}
+
+export interface CreateReplayDto {
+  tenantId: string;
+  aggregateId?: string;
+  aggregateType?: string;
+  fromVersion: number;
+  toVersion?: number;
+}
+
+export interface BackgroundSyncTask {
+  id: string;
+  tenantId: string;
+  deviceId: string | null;
+  syncType: SyncType;
+  priority: number;
+  status: BgSyncTaskStatus;
+  errorMessage: string | null;
+  result: Record<string, any> | null;
+  scheduledAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  retryCount: number;
+  maxRetries: number;
+}
+
+export interface SyncStatusDetails {
+  tenantId: string;
+  deviceCount: number;
+  activeDeviceCount: number;
+  totalEvents: number;
+  pendingEvents: number;
+  lastSyncAt: string | null;
+  lastReplayAt: string | null;
+  unresolvedConflicts: number;
+  queueDepth: number;
+  activeBgTasks: number;
+  snapshotsAvailable: number;
+  storageBytes: number;
+  compressedBytes: number;
+  compressionRatio: number;
+  syncFrequency: number;
+  avgSyncDurationMs: number;
+  errorRate: number;
+  healthy: boolean;
 }
 
 export type AggregateType =

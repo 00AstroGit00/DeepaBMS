@@ -1,7 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 
-const JWT_SECRET: string = process.env.JWT_SECRET!;
+function getJwtSecret(): string {
+  return process.env.JWT_SECRET || '';
+}
 const JWT_ISSUER = process.env.JWT_ISSUER || 'deepa-bms';
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'deepa-bms-api';
 
@@ -10,8 +13,8 @@ export interface AuthUser {
   name: string;
   role: string;
   employeeId?: string;
-  /** Tenant the user belongs to; bound to every tenant-scoped request (M1-2). */
   tenantId?: string;
+  scopes?: string[];
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -67,10 +70,9 @@ export function authenticate(
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET, {
+    const decoded = jwt.verify(token, getJwtSecret(), {
       issuer: JWT_ISSUER,
       audience: JWT_AUDIENCE,
-      // SEC-08: pin to a single algorithm to prevent alg=none / key confusion.
       algorithms: ['HS256'],
     }) as any;
 
@@ -104,6 +106,139 @@ export function authenticate(
   }
 }
 
+export function optionalAuth(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): void {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    next();
+    return;
+  }
+
+  const parts = authHeader.split(' ');
+  if (parts.length !== 2 || parts[0] !== 'Bearer' || !parts[1]) {
+    next();
+    return;
+  }
+
+  const token = parts[1];
+  try {
+    const decoded = jwt.verify(token, getJwtSecret(), {
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+      algorithms: ['HS256'],
+    }) as any;
+
+    req.user = {
+      id: decoded.id,
+      name: decoded.name,
+      role: decoded.role,
+      employeeId: decoded.employeeId,
+      tenantId: decoded.tenantId,
+    };
+  } catch {
+    // Silently ignore — auth is optional
+  }
+  next();
+}
+
+export function authenticateApiKey(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): void {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) {
+    authenticate(req, res, next);
+    return;
+  }
+
+  const parts = authHeader.split(' ');
+  if (parts.length !== 2 || parts[0] !== 'Bearer' || !parts[1]) {
+    authenticate(req, res, next);
+    return;
+  }
+
+  const token = parts[1];
+
+  if (token.startsWith('svc-')) {
+    const { AuthRepository } = require('../domains/auth/auth.repository');
+    AuthRepository.findServiceAccountByToken(token)
+      .then((svc: any) => {
+        if (!svc || svc.revokedAt) {
+          res.status(401).json({ message: 'Invalid service account token' });
+          return;
+        }
+        req.user = {
+          id: svc.id,
+          name: svc.name,
+          role: 'apiclient',
+          tenantId: svc.tenantId,
+        };
+        next();
+      })
+      .catch(() => {
+        res.status(500).json({ message: 'Authentication error' });
+      });
+    return;
+  }
+
+  if (token.includes('.')) {
+    const { AuthRepository } = require('../domains/auth/auth.repository');
+    const bcrypt = require('bcryptjs');
+    const prefix = token.split('.')[0];
+    AuthRepository.findApiKeyByPrefix(prefix)
+      .then((stored: any) => {
+        if (!stored || stored.revokedAt) {
+          res.status(401).json({ message: 'Invalid API key' });
+          return;
+        }
+        if (stored.expiresAt && new Date(stored.expiresAt) < new Date()) {
+          res.status(401).json({ message: 'API key expired' });
+          return;
+        }
+        return bcrypt.compare(token, stored.hashedKey).then((valid: boolean) => {
+          if (!valid) {
+            res.status(401).json({ message: 'Invalid API key' });
+            return;
+          }
+          req.user = {
+            id: stored.userId || stored.id,
+            name: stored.name,
+            role: 'apiclient',
+            tenantId: stored.tenantId,
+            scopes: stored.scopes || [],
+          };
+          next();
+        });
+      })
+      .catch(() => {
+        res.status(500).json({ message: 'Authentication error' });
+      });
+    return;
+  }
+
+  authenticate(req, res, next);
+}
+
+export function requireMfa(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): void {
+  const mfaVerified = (req as any).mfaVerified;
+  if (!mfaVerified) {
+    res.status(403).json({
+      message: 'MFA verification required',
+      code: 'MFA_REQUIRED',
+    });
+    return;
+  }
+  next();
+}
+
 export function authorize(...allowedRoles: string[]) {
   return (
     req: AuthenticatedRequest,
@@ -128,6 +263,46 @@ export function authorize(...allowedRoles: string[]) {
   };
 }
 
+export function requireScope(...requiredScopes: string[]) {
+  return (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction,
+  ): void => {
+    if (!req.user) {
+      res.status(401).json({ message: 'Authentication required' });
+      return;
+    }
+
+    if (req.user.role === 'superadmin' || req.user.role === 'owner') {
+      next();
+      return;
+    }
+
+    if (!req.user.scopes || req.user.scopes.length === 0) {
+      res.status(403).json({
+        message: 'Insufficient permissions: no scopes assigned',
+        required: requiredScopes,
+      });
+      return;
+    }
+
+    const hasScope = requiredScopes.some((s) => req.user!.scopes!.includes(s));
+    if (!hasScope) {
+      res.status(403).json({
+        message: 'Insufficient permissions: missing required scope',
+        required: requiredScopes,
+        userScopes: req.user.scopes,
+      });
+      return;
+    }
+
+    next();
+  };
+}
+
+let tokenCounter = 0;
+
 export function signToken(user: {
   id: string;
   name: string;
@@ -135,20 +310,70 @@ export function signToken(user: {
   employeeId?: string;
   tenantId?: string;
 }): string {
+  const jti = `${Date.now().toString(36)}-${(tokenCounter++).toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
   const payload: Record<string, any> = {
     id: user.id,
     name: user.name,
     role: user.role,
+    iat: Math.floor(Date.now() / 1000),
+    jti,
   };
   if (user.employeeId) payload.employeeId = user.employeeId;
-  // M1-2: bind tenant to the token so it cannot be spoofed via headers.
   payload.tenantId =
     user.tenantId ||
     process.env.SINGLE_TENANT_ID ||
     '00000000-0000-0000-0000-000000000000';
-  return jwt.sign(payload, JWT_SECRET, {
+  return jwt.sign(payload, getJwtSecret(), {
     expiresIn: '8h',
     issuer: JWT_ISSUER,
     audience: JWT_AUDIENCE,
   });
+}
+
+export function verifyRefreshToken(token: string): {
+  jti: string;
+  sessionId: string;
+  userId: string;
+  tenantId: string;
+} | null {
+  try {
+    const decoded = jwt.verify(token, getJwtSecret(), {
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+      algorithms: ['HS256'],
+    }) as any;
+    if (decoded.type !== 'refresh') return null;
+    return {
+      jti: decoded.jti,
+      sessionId: decoded.sessionId,
+      userId: decoded.userId,
+      tenantId: decoded.tenantId,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function signRefreshToken(payload: {
+  sessionId: string;
+  userId: string;
+  tenantId: string;
+}): string {
+  const jti = `${Date.now().toString(36)}-${(tokenCounter++).toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
+  return jwt.sign(
+    {
+      jti,
+      sessionId: payload.sessionId,
+      userId: payload.userId,
+      tenantId: payload.tenantId,
+      type: 'refresh',
+      iat: Math.floor(Date.now() / 1000),
+    },
+    getJwtSecret(),
+    {
+      expiresIn: '30d',
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+    },
+  );
 }

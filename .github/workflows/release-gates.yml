@@ -128,9 +128,10 @@ jobs:
           done
 
       - name: Run k6 smoke load test
-        uses: grafana/k6-action@v0.3.1
-        with:
-          filename: tests/load/smoke.js
+        run: |
+          docker run --rm --network host \
+            -v "${{ github.workspace }}/tests/load:/tests/load" \
+            grafana/k6:latest run /tests/load/smoke.js
 
       - name: Stop container
         if: always()

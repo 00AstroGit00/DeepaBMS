@@ -2828,3 +2828,70 @@ CREATE TABLE IF NOT EXISTS metric_counters (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (name, labels)
 );
+
+-- P13-1: multi-tenant enterprise SaaS tenants control plane table
+CREATE TABLE IF NOT EXISTS tenants (
+  id VARCHAR(50) PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  slug VARCHAR(200) NOT NULL UNIQUE,
+  plan VARCHAR(20) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'trial',
+  branding TEXT,
+  max_rooms INT NOT NULL DEFAULT 15,
+  max_users INT NOT NULL DEFAULT 5,
+  contact_email VARCHAR(200),
+  contact_name VARCHAR(200),
+  domain VARCHAR(200),
+  locale VARCHAR(10) DEFAULT 'en',
+  timezone VARCHAR(50) DEFAULT 'UTC',
+  features TEXT,
+  metadata TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- P13-2: shared schema migration version tracking
+-- SQLite-compatible fallback; `shared.schema_migrations` via postgres-migration.ts
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version VARCHAR(50) PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  checksum VARCHAR(128) NOT NULL,
+  duration_ms INT NOT NULL DEFAULT 0,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending'
+);
+
+-- P13-2: tenant schema provisioning tracking
+-- Note: `shared.tenant_schemas` is used via postgres-migration.ts;
+-- here we create the fallback `tenant_schemas` for SQLite compat.
+CREATE TABLE IF NOT EXISTS tenant_schemas (
+  id VARCHAR(50) PRIMARY KEY,
+  tenant_id VARCHAR(50) NOT NULL,
+  tenant_slug VARCHAR(200) NOT NULL,
+  schema_name VARCHAR(200) NOT NULL UNIQUE,
+  status VARCHAR(20) NOT NULL DEFAULT 'provisioning' CHECK(status IN ('provisioning', 'active', 'suspended', 'archived', 'deprovisioning', 'deprovisioned')),
+  provisioned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  last_migration_at TIMESTAMP,
+  last_backup_at TIMESTAMP,
+  table_count INT DEFAULT 0,
+  size_bytes BIGINT DEFAULT 0,
+  metadata TEXT DEFAULT '{}',
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+-- P13-8: SLO configurations (Observability)
+CREATE TABLE IF NOT EXISTS slo_configs (
+  id VARCHAR(50) PRIMARY KEY,
+  tenant_id VARCHAR(50) NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  target_availability REAL NOT NULL DEFAULT 0.995,
+  target_latency_ms INT NOT NULL DEFAULT 500,
+  window_days INT NOT NULL DEFAULT 30,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_slo_tenant ON slo_configs(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_slo_enabled ON slo_configs(enabled);

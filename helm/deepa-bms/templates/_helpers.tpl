@@ -62,5 +62,5 @@ app.kubernetes.io/component: {{ .component }}
 Name for a given component.
 */}}
 {{- define "deepa-bms.componentName" -}}
-{{- printf "%s-%s" (include "deepa-bms.fullname" .) .component }}
+{{- printf "%s-%s" (include "deepa-bms.fullname" .root) .component }}
 {{- end }}

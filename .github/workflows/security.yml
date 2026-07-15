@@ -21,6 +21,9 @@ jobs:
     name: Dependency Scan
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Setup DeepaBMS
         uses: ./.github/actions/setup
 

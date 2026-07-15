@@ -120,7 +120,6 @@ jobs:
           docker run -d --name backend -p 3000:3000 \
             -v sqlite-data:/app/data \
             -e SQLITE_DB_PATH=/app/data/deepa-bms.db \
-            -e NODE_ENV=production \
             -e JWT_SECRET=perf-test-secret \
             ${{ env.IMAGE_TAG }}
 

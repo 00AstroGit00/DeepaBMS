@@ -48,22 +48,12 @@ jobs:
         with:
           args: --severity-threshold=high
 
-  codeql:
-    name: CodeQL Analysis
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: javascript-typescript
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+  # NOTE: CodeQL is provided by GitHub's default code scanning workflow
+  # (github-code-scanning/codeql, enabled via the Security tab). Running a
+  # second CodeQL analysis here caused duplicate-SARIF upload conflicts
+  # ("could not process the submitted SARIF file"). The default workflow
+  # already covers javascript-typescript (plus python and actions), so it
+  # is the authoritative CodeQL gate for this repository.
 
   container-scan:
     name: Container Scan

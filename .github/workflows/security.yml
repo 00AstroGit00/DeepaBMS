@@ -63,8 +63,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Retry the build: sqlite3 prebuilt-binary download occasionally hits
+      # transient ECONNRESET during `npm ci` (native addon fetch). The Build
+      # workflow uses the same Dockerfile; a retry resolves the flake without
+      # changing image contents.
       - name: Build backend image
-        run: docker build -t deepa-bms-backend:scan -f apps/backend/Dockerfile.prod ./apps/backend
+        run: |
+          for i in 1 2 3; do
+            if docker build -t deepa-bms-backend:scan -f apps/backend/Dockerfile.prod ./apps/backend; then
+              break
+            fi
+            echo "::warning::docker build attempt $i failed (likely transient npm/sqlite3 download error), retrying..."
+            sleep 15
+          done
 
       - name: Trivy vulnerability scan
         uses: aquasecurity/trivy-action@master

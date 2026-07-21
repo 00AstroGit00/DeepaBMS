@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup DeepaBMS
         uses: ./.github/actions/setup
@@ -61,7 +61,7 @@ jobs:
     if: ${{ github.event_name == 'push' }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Retry the build: sqlite3 prebuilt-binary download occasionally hits
       # transient ECONNRESET during `npm ci` (native addon fetch). The Build

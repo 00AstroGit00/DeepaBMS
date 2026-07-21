@@ -100,7 +100,7 @@ jobs:
             "s3://${{ secrets.BACKUP_BUCKET }}/sqlite/deepa-bms-$TIMESTAMP.db.gz"
 
       - name: Upload backup artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: database-backup
           path: backups/*.gz
